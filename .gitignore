@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+
+# Google OAuth tokens and credentials
+token.json
+credentials.json
+
+# Database
+data/
+*.sqlite
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+dist/
+build/
