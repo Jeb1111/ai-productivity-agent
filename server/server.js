@@ -33,16 +33,16 @@ function formatFriendly(dateStr, timeStr) {
   }
 }
 
-function updateBookingInSession(sessionState, booking) {
-  if (!booking.id) booking.id = uuidv4();
-  const idx = sessionState.activeBookings.findIndex((b) => b.id === booking.id);
-  if (idx === -1) sessionState.activeBookings.push(booking);
-  else sessionState.activeBookings[idx] = booking;
+function updateEventInSession(sessionState, event) {
+  if (!event.id) event.id = uuidv4();
+  const idx = sessionState.activeEvents.findIndex((e) => e.id === event.id);
+  if (idx === -1) sessionState.activeEvents.push(event);
+  else sessionState.activeEvents[idx] = event;
   return sessionState;
 }
 
-function getUnconfirmedBooking(sessionState) {
-  return sessionState.activeBookings.find((b) => !b.confirmed) || null;
+function getUnconfirmedEvent(sessionState) {
+  return sessionState.activeEvents.find((e) => !e.confirmed) || null;
 }
 
 async function saveSession(db, sessionId, sessionState) {
@@ -76,29 +76,10 @@ app.post("/chat", async (req, res) => {
     const db = await getDB();
     const sessionRow = await db.get("SELECT * FROM sessions WHERE session_id = ?", sessionId);
     let sessionState = sessionRow ? JSON.parse(sessionRow.state) : {};
-    sessionState.activeBookings = sessionState.activeBookings || [];
+    sessionState.activeEvents = sessionState.activeEvents || [];
 
     // Parse intent and fields
     const parsed = await intentHandler(message, sessionState);
-
-    // Handle email if provided by parser
-    if (parsed.email && parsed.email !== sessionState.email) {
-      let userRow = await db.get("SELECT * FROM users WHERE email = ?", parsed.email);
-      if (!userRow) {
-        const r = await db.run("INSERT INTO users (email) VALUES (?)", parsed.email);
-        sessionState.user_id = r.lastID;
-      } else {
-        sessionState.user_id = userRow.id;
-      }
-      sessionState.email = parsed.email;
-    }
-
-    // If no email, ask for it
-    if (!sessionState.email && parsed.intent !== "send_email") {
-      const askEmailReply = parsed.reply || "I need your email before I can help with bookings. Could you share it please?";
-      await saveSession(db, sessionId, sessionState);
-      return res.json({ reply: askEmailReply, state: sessionState, sessionId });
-    }
 
     // Handle email sending intent
     if (parsed.intent === "send_email") {
@@ -122,13 +103,11 @@ app.post("/chat", async (req, res) => {
           body: parsed.email_body || "Hello!"
         });
 
-        // Log email in database if user is authenticated
-        if (sessionState.user_id) {
-          await db.run(
-            "INSERT INTO email_logs (user_id, recipient, subject, status) VALUES (?, ?, ?, ?)",
-            [sessionState.user_id, parsed.email_recipient, parsed.email_subject || "Message from AI Assistant", "sent"]
-          );
-        }
+        // Log email in database for tracking
+        await db.run(
+          "INSERT INTO email_logs (recipient, subject, status) VALUES (?, ?, ?)",
+          [parsed.email_recipient, parsed.email_subject || "Message from AI Assistant", "sent"]
+        );
 
         parsed.reply = `Email sent to ${parsed.email_recipient} successfully!`;
         await saveSession(db, sessionId, sessionState);
@@ -142,46 +121,45 @@ app.post("/chat", async (req, res) => {
       }
     }
 
-    // Handle booking intent
-    if (parsed.intent === "book") {
-      let currentBooking = getUnconfirmedBooking(sessionState);
-      
-      if (parsed.service || parsed.date || parsed.time) {
-        if (currentBooking && !currentBooking.preConfirmed) {
-          sessionState.activeBookings = sessionState.activeBookings.filter(b => b.confirmed);
-          currentBooking = null;
+    // Handle create event intent
+    if (parsed.intent === "create_event") {
+      let currentEvent = getUnconfirmedEvent(sessionState);
+
+      if (parsed.title || parsed.date || parsed.time) {
+        if (currentEvent && !currentEvent.preConfirmed) {
+          sessionState.activeEvents = sessionState.activeEvents.filter(e => e.confirmed);
+          currentEvent = null;
         }
       }
-      
-      if (!currentBooking) {
-        currentBooking = {
+
+      if (!currentEvent) {
+        currentEvent = {
           id: uuidv4(),
-          service: null,
+          title: null,
           date: null,
           time: null,
           duration_minutes: 60,
           notes: null,
           preConfirmed: false,
           confirmed: false,
-          db_id: null,
           google_event_id: null
         };
       }
 
       // Merge parsed info
-      currentBooking.service = parsed.service || currentBooking.service;
-      currentBooking.date = parsed.date || currentBooking.date;
-      currentBooking.time = parsed.time || currentBooking.time;
-      currentBooking.duration_minutes = parsed.duration_minutes || currentBooking.duration_minutes;
-      currentBooking.notes = parsed.notes || currentBooking.notes;
+      currentEvent.title = parsed.title || currentEvent.title;
+      currentEvent.date = parsed.date || currentEvent.date;
+      currentEvent.time = parsed.time || currentEvent.time;
+      currentEvent.duration_minutes = parsed.duration_minutes || currentEvent.duration_minutes;
+      currentEvent.notes = parsed.notes || currentEvent.notes;
 
-      updateBookingInSession(sessionState, currentBooking);
+      updateEventInSession(sessionState, currentEvent);
 
       // Check for missing fields
       const missing = [];
-      if (!currentBooking.service) missing.push("service");
-      if (!currentBooking.date) missing.push("date");
-      if (!currentBooking.time) missing.push("time");
+      if (!currentEvent.title) missing.push("event title");
+      if (!currentEvent.date) missing.push("date");
+      if (!currentEvent.time) missing.push("time");
 
       if (missing.length) {
         parsed.reply = `Please provide the following: ${missing.join(", ")}.`;
@@ -190,78 +168,46 @@ app.post("/chat", async (req, res) => {
       }
 
       // If all info present and not yet preConfirmed
-      if (!currentBooking.preConfirmed) {
-        currentBooking.preConfirmed = true;
-        updateBookingInSession(sessionState, currentBooking);
-        parsed.reply = `I'll book a **${currentBooking.service}** on **${formatFriendly(currentBooking.date, currentBooking.time)}**. Would you like to confirm? (yes/no)`;
+      if (!currentEvent.preConfirmed) {
+        currentEvent.preConfirmed = true;
+        updateEventInSession(sessionState, currentEvent);
+        parsed.reply = `I'll create **${currentEvent.title}** on **${formatFriendly(currentEvent.date, currentEvent.time)}**. Would you like to confirm? (yes/no)`;
         await saveSession(db, sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
       // Handle confirmation
-      if (currentBooking.preConfirmed && !currentBooking.confirmed) {
+      if (currentEvent.preConfirmed && !currentEvent.confirmed) {
         const yn = parsed.confirmation_response || extractYesNo(message);
         if (yn === "yes") {
           try {
             // Create Google Calendar event
-            const start = new Date(`${currentBooking.date}T${currentBooking.time}:00`);
-            const end = new Date(start.getTime() + (currentBooking.duration_minutes || 60) * 60000);
+            const start = new Date(`${currentEvent.date}T${currentEvent.time}:00`);
+            const end = new Date(start.getTime() + (currentEvent.duration_minutes || 60) * 60000);
 
             const calendarResult = await createCalendarEvent({
-              summary: `${currentBooking.service} - ${sessionState.email}`,
-              description: currentBooking.notes || "",
+              summary: currentEvent.title,
+              description: currentEvent.notes || "",
               startDateTime: start.toISOString(),
-              endDateTime: end.toISOString(),
-              attendeeEmail: sessionState.email
+              endDateTime: end.toISOString()
             });
 
-            currentBooking.google_event_id = calendarResult.eventId;
+            currentEvent.google_event_id = calendarResult.eventId;
+            currentEvent.confirmed = true;
+            sessionState.lastEvent = { ...currentEvent };
 
-            // Save to database
-            const insert = await db.run(
-              `INSERT INTO appointments (user_id, service, date, time, duration_minutes, notes, google_event_id, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [
-                sessionState.user_id,
-                currentBooking.service,
-                currentBooking.date,
-                currentBooking.time,
-                currentBooking.duration_minutes || 60,
-                currentBooking.notes || "",
-                currentBooking.google_event_id,
-                "Booked"
-              ]
-            );
+            updateEventInSession(sessionState, currentEvent);
 
-            currentBooking.confirmed = true;
-            currentBooking.db_id = insert.lastID;
-            sessionState.lastAppointment = { ...currentBooking };
-
-            updateBookingInSession(sessionState, currentBooking);
-
-            let replyMsg = `Your ${currentBooking.service} is confirmed for ${formatFriendly(currentBooking.date, currentBooking.time)}.`;
-            
-            // Send notification email
-            try {
-              await sendGmailEmail({
-                to: sessionState.email,
-                subject: `Appointment Confirmed: ${currentBooking.service}`,
-                body: `Your ${currentBooking.service} appointment is confirmed for ${formatFriendly(currentBooking.date, currentBooking.time)}.\n\nWe look forward to seeing you!`
-              });
-              replyMsg += " A confirmation email has been sent.";
-            } catch (emailErr) {
-              console.error("Confirmation email failed:", emailErr);
-              replyMsg += " (Note: Couldn't send confirmation email)";
-            }
+            let replyMsg = `Your event "${currentEvent.title}" is confirmed for ${formatFriendly(currentEvent.date, currentEvent.time)}.`;
 
             await saveSession(db, sessionId, sessionState);
             return res.json({ reply: replyMsg, state: sessionState, sessionId });
 
           } catch (calendarError) {
-            console.error("Calendar booking failed:", calendarError);
-            currentBooking.preConfirmed = false;
-            updateBookingInSession(sessionState, currentBooking);
-            
+            console.error("Calendar event creation failed:", calendarError);
+            currentEvent.preConfirmed = false;
+            updateEventInSession(sessionState, currentEvent);
+
             let errorMessage = "Unable to create calendar event. Please try again.";
             if (calendarError.message.includes("authorization")) {
               errorMessage = "Calendar authorization expired. Please re-authorize by visiting /auth";
@@ -270,11 +216,11 @@ app.post("/chat", async (req, res) => {
             await saveSession(db, sessionId, sessionState);
             return res.json({ reply: errorMessage, state: sessionState, sessionId });
           }
-          
+
         } else if (yn === "no") {
-          currentBooking.preConfirmed = false;
-          updateBookingInSession(sessionState, currentBooking);
-          parsed.reply = "No problem - what would you like to change? (service / date / time / notes)";
+          currentEvent.preConfirmed = false;
+          updateEventInSession(sessionState, currentEvent);
+          parsed.reply = "No problem - what would you like to change? (title / date / time / notes)";
           await saveSession(db, sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         } else {
@@ -287,59 +233,34 @@ app.post("/chat", async (req, res) => {
 
     // Handle cancel intent
     else if (parsed.intent === "cancel") {
-      let appointmentRow = null;
-      if (parsed.service && parsed.date) {
-        appointmentRow = await db.get(
-          `SELECT * FROM appointments WHERE user_id = ? AND service = ? AND date = ?`,
-          [sessionState.user_id, parsed.service, parsed.date]
-        );
-      }
-
-      if (!appointmentRow && sessionState.lastAppointment && sessionState.lastAppointment.db_id) {
-        appointmentRow = await db.get("SELECT * FROM appointments WHERE id = ?", sessionState.lastAppointment.db_id);
-      }
-
-      if (!appointmentRow) {
-        parsed.reply = "I couldn't find that appointment. Which appointment would you like to cancel? (please specify service and date)";
+      // For personal productivity, we'll work with calendar events directly
+      if (!sessionState.lastEvent || !sessionState.lastEvent.google_event_id) {
+        parsed.reply = "I don't see any recent events to cancel. Please specify which event you'd like to cancel (title and date).";
         await saveSession(db, sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
       try {
-        // Remove from Google Calendar if event exists
-        if (appointmentRow.google_event_id) {
-          await deleteCalendarEvent(appointmentRow.google_event_id);
-        }
+        // Remove from Google Calendar
+        await deleteCalendarEvent(sessionState.lastEvent.google_event_id);
+
+        // Update session state
+        sessionState.activeEvents = sessionState.activeEvents.filter(e => e.google_event_id !== sessionState.lastEvent.google_event_id);
+        const eventTitle = sessionState.lastEvent.title;
+        const eventDate = formatFriendly(sessionState.lastEvent.date, sessionState.lastEvent.time);
+        sessionState.lastEvent = null;
+
+        let replyMsg = `Your event "${eventTitle}" on ${eventDate} has been cancelled.`;
+
+        await saveSession(db, sessionId, sessionState);
+        return res.json({ reply: replyMsg, state: sessionState, sessionId });
+
       } catch (calErr) {
-        console.warn("Calendar delete failed:", calErr.message);
+        console.error("Calendar delete failed:", calErr.message);
+        parsed.reply = "Unable to cancel the event. Please try again or check your calendar authorization.";
+        await saveSession(db, sessionId, sessionState);
+        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
-
-      // Delete from database
-      await db.run("DELETE FROM appointments WHERE id = ?", appointmentRow.id);
-
-      // Update session state
-      sessionState.activeBookings = sessionState.activeBookings.filter(b => b.db_id !== appointmentRow.id);
-      if (sessionState.lastAppointment && sessionState.lastAppointment.db_id === appointmentRow.id) {
-        sessionState.lastAppointment = null;
-      }
-
-      let replyMsg = `Your ${appointmentRow.service} on ${formatFriendly(appointmentRow.date, appointmentRow.time)} has been cancelled.`;
-      
-      // Send cancellation email
-      try {
-        await sendGmailEmail({
-          to: sessionState.email,
-          subject: `Appointment Cancelled: ${appointmentRow.service}`,
-          body: `Your ${appointmentRow.service} appointment scheduled for ${formatFriendly(appointmentRow.date, appointmentRow.time)} has been cancelled.`
-        });
-        replyMsg += " A confirmation email has been sent.";
-      } catch (emailErr) {
-        console.error("Cancellation email failed:", emailErr);
-        replyMsg += " (Note: Couldn't send confirmation email)";
-      }
-
-      await saveSession(db, sessionId, sessionState);
-      return res.json({ reply: replyMsg, state: sessionState, sessionId });
     }
 
     // Handle reschedule intent
@@ -484,30 +405,27 @@ app.post("/chat", async (req, res) => {
       }
     }
 
-    // Handle ask/check intent
-    else if (parsed.intent === "ask") {
-      const qDate = parsed.date || sessionState.lastAppointment?.date;
-      if (!qDate) {
-        parsed.reply = "Which date would you like me to check?";
+    // Handle check_schedule intent
+    else if (parsed.intent === "check_schedule") {
+      const qDate = parsed.date || new Date().toISOString().split('T')[0]; // default to today
+
+      try {
+        // This would ideally fetch from Google Calendar API
+        // For now, we'll provide a simple response
+        parsed.reply = `To check your schedule for ${qDate}, please visit your Google Calendar directly. I'll focus on helping you create, modify, and manage individual events through our conversation.`;
+
+        await saveSession(db, sessionId, sessionState);
+        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+      } catch (error) {
+        parsed.reply = "Unable to check your schedule right now. Please try again.";
         await saveSession(db, sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
-
-      const appts = await db.all("SELECT * FROM appointments WHERE user_id = ? AND date = ?", [sessionState.user_id, qDate]);
-      if (!appts || appts.length === 0) {
-        parsed.reply = `You don't have any appointments on ${qDate}.`;
-      } else {
-        const list = appts.map(a => `${a.service} at ${a.time}${a.notes ? " - " + a.notes : ""}`).join("\n");
-        parsed.reply = `Here are your appointments on ${qDate}:\n${list}`;
-      }
-
-      await saveSession(db, sessionId, sessionState);
-      return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
 
     // Default response
     else {
-      const reply = parsed.reply || "How can I help you today? I can help with booking appointments, sending emails, and managing your schedule.";
+      const reply = parsed.reply || "How can I help you today? I can help you create calendar events, send emails, and manage your schedule.";
       await saveSession(db, sessionId, sessionState);
       return res.json({ reply, state: sessionState, sessionId });
     }
