@@ -96,6 +96,7 @@ function localParse(message, session = {}) {
     // Delete/cancel patterns - comprehensive and robust
     /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?(?:my\s+)?["']([^"']+)["']\s*(?:event|appointment|meeting)?/i,  // "delete the "TEST123" event"
     /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?([A-Z0-9]+)\s+(?:event|appointment|meeting)/i,  // "delete the TEST123 event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:my\s+)?(?:the\s+)?(?:next|upcoming|first|latest)\s+(?:event|appointment|meeting)/i,  // "cancel my next event"
     /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:my\s+)?(?:the\s+)?([^,\s]+(?:\s+[^,\s]+)*?)\s+(?:event|appointment|meeting)/i,  // "delete my test meeting event"
     /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?(?:my\s+)?([^,\s]+(?:\s+[^,\s]+)*?)$/i,  // "delete TEST123" or "delete the event"
     /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:tomorrow'?s?|today'?s?)\s+([^,\s]+(?:\s+[^,\s]+)*?)(?:\s+(?:event|appointment|meeting))?/i,  // "delete tomorrow's event"

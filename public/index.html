@@ -60,6 +60,38 @@
       margin-bottom: 15px;
       font-size: 16px;
       font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .refresh-button {
+      background: none;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+      width: 28px;
+      height: 28px;
+    }
+
+    .refresh-button:hover {
+      background: #333;
+      color: white;
+    }
+
+    .refresh-button.spinning {
+      animation: spin 0.6s linear;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     .event-card {
@@ -290,14 +322,263 @@
       display: none;
       color: #999;
       font-style: italic;
-      position: absolute;
-      bottom: 80px;
-      right: 30px;
-      font-size: 14px;
-      background: #333;
-      padding: 8px 12px;
-      border-radius: 15px;
+      font-size: 13px;
+      padding: 8px 16px;
+      margin: 0 20px 10px 20px;
+      text-align: center;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-content {
+      background: #1a1a1a;
       border: 1px solid #555;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.3s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      color: white;
+      font-size: 20px;
+      margin: 0;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 28px;
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: #333;
+      color: white;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .event-detail {
+      margin-bottom: 16px;
+    }
+
+    .event-detail-label {
+      color: #999;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .event-detail-value {
+      color: white;
+      font-size: 15px;
+      padding: 8px 0;
+    }
+
+    .event-detail-value.empty {
+      color: #666;
+      font-style: italic;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    #viewModeButtons,
+    #editModeButtons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    .modal-button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      min-width: 120px;
+      justify-content: center;
+    }
+
+    .modal-button.edit {
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+    }
+
+    .modal-button.edit:hover {
+      background: #444;
+      border-color: #777;
+    }
+
+    .modal-button.delete {
+      background: #ff4444;
+      color: white;
+    }
+
+    .modal-button.delete:hover {
+      background: #ff3333;
+    }
+
+    .modal-button.save {
+      background: white;
+      color: #333;
+    }
+
+    .modal-button.save:hover {
+      background: #f0f0f0;
+    }
+
+    .modal-button.cancel {
+      background: #333;
+      color: white;
+      border: 1px solid #555;
+    }
+
+    .modal-button.cancel:hover {
+      background: #444;
+    }
+
+    .modal-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .edit-form {
+      display: none;
+    }
+
+    .edit-form.active {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      color: #999;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .form-input {
+      width: 100%;
+      background: #262626;
+      border: 1px solid #555;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: white;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      border-color: white;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+    }
+
+    .form-input::placeholder {
+      color: #666;
+    }
+
+    textarea.form-input {
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+
+    .confirm-dialog {
+      text-align: center;
+    }
+
+    .confirm-dialog p {
+      color: white;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+
+    .confirm-dialog .event-name {
+      color: #ff4444;
+      font-weight: 600;
+    }
+
+    .confirm-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
     }
 
     @media (max-width: 600px) {
@@ -368,12 +649,14 @@
       </div>
     </div>
 
+    <div class="loading" id="loading">Buddy is making it happen...</div>
+
     <div class="input-area">
-      <input 
-        type="text" 
-        id="messageInput" 
-        class="message-input" 
-        placeholder="Type your message..." 
+      <input
+        type="text"
+        id="messageInput"
+        class="message-input"
+        placeholder="Type your message..."
         maxlength="500"
       />
       <button id="sendButton" class="send-button" onclick="sendMessage()">
@@ -382,14 +665,150 @@
         </svg>
       </button>
     </div>
-
-    <div class="loading" id="loading">Buddy is making it happen...</div>
     </div>
 
     <div class="sidebar">
-      <h3>Upcoming Events</h3>
+      <h3>
+        <span>Upcoming Events</span>
+        <button class="refresh-button" id="refreshButton" onclick="refreshEvents()" title="Refresh events">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+        </button>
+      </h3>
       <div id="upcomingEvents">
         <div class="no-events">No upcoming events</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event Details Modal -->
+  <div id="eventModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Event Details</h2>
+        <button class="modal-close" onclick="closeEventModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- View Mode -->
+        <div id="viewMode">
+          <div class="event-detail">
+            <div class="event-detail-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z"/>
+              </svg>
+              Title
+            </div>
+            <div class="event-detail-value" id="detailTitle"></div>
+          </div>
+          <div class="event-detail">
+            <div class="event-detail-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+              </svg>
+              Date & Time
+            </div>
+            <div class="event-detail-value" id="detailDateTime"></div>
+          </div>
+          <div class="event-detail">
+            <div class="event-detail-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+              </svg>
+              Location
+            </div>
+            <div class="event-detail-value" id="detailLocation"></div>
+          </div>
+          <div class="event-detail">
+            <div class="event-detail-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+              </svg>
+              Description
+            </div>
+            <div class="event-detail-value" id="detailDescription"></div>
+          </div>
+        </div>
+
+        <!-- Edit Mode -->
+        <div id="editMode" class="edit-form">
+          <div class="form-group">
+            <label class="form-label">Title</label>
+            <input type="text" id="editTitle" class="form-input" placeholder="Event title" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date</label>
+            <input type="date" id="editDate" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Start Time</label>
+            <input type="time" id="editTime" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Duration (minutes)</label>
+            <input type="number" id="editDuration" class="form-input" placeholder="60" min="15" step="15" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Location</label>
+            <input type="text" id="editLocation" class="form-input" placeholder="Event location (optional)" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="editDescription" class="form-input" placeholder="Event description (optional)"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <!-- View Mode Buttons -->
+        <div id="viewModeButtons">
+          <button class="modal-button edit" onclick="enterEditMode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+            Edit
+          </button>
+          <button class="modal-button delete" onclick="confirmDelete()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+            Delete
+          </button>
+        </div>
+        <!-- Edit Mode Buttons -->
+        <div id="editModeButtons" style="display: none;">
+          <button class="modal-button cancel" onclick="cancelEdit()">Cancel</button>
+          <button class="modal-button save" onclick="saveEvent()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Confirm Delete</h2>
+        <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="confirm-dialog">
+          <p>Are you sure you want to delete <span class="event-name" id="deleteEventName"></span>?</p>
+          <p style="color: #999; font-size: 14px;">This action cannot be undone.</p>
+          <div class="confirm-buttons">
+            <button class="modal-button cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="modal-button delete" onclick="deleteEvent()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+              Delete Event
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -440,7 +859,7 @@
       // Disable input and show loading
       messageInput.disabled = true;
       sendButton.disabled = true;
-      loading.style.display = 'block';
+      loading.classList.add('show');
 
       // Add user message
       addMessage(message, 'user');
@@ -468,14 +887,14 @@
         // Re-enable input
         messageInput.disabled = false;
         sendButton.disabled = false;
-        loading.style.display = 'none';
+        loading.classList.remove('show');
         messageInput.focus();
       }
     }
 
     function useSuggestion(text) {
       messageInput.value = text;
-      sendMessage();
+      messageInput.focus();
     }
 
     // Upcoming Events Functionality
@@ -499,7 +918,7 @@
 
     function createEventCard(event) {
       return `
-        <div class="event-card">
+        <div class="event-card" onclick='openEventModal(${JSON.stringify(event).replace(/'/g, "&apos;")})'>
           <div class="event-title">${event.title}</div>
           <div class="event-time">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -515,6 +934,19 @@
           </div>
         </div>
       `;
+    }
+
+    // Refresh events with animation
+    async function refreshEvents() {
+      const refreshButton = document.getElementById('refreshButton');
+      refreshButton.classList.add('spinning');
+
+      await loadUpcomingEvents();
+
+      // Remove spinning class after animation completes
+      setTimeout(() => {
+        refreshButton.classList.remove('spinning');
+      }, 600);
     }
 
     // Load events on page load
@@ -536,6 +968,208 @@
 
     // Focus input on load
     messageInput.focus();
+
+    // ============ Event Modal Functionality ============
+    let currentEvent = null;
+
+    function openEventModal(event) {
+      currentEvent = event;
+
+      // Populate view mode
+      document.getElementById('detailTitle').textContent = event.title || 'Untitled Event';
+      document.getElementById('detailDateTime').textContent = event.fullDateTime || `${event.date} ${event.time}`;
+
+      const locationEl = document.getElementById('detailLocation');
+      if (event.location) {
+        locationEl.textContent = event.location;
+        locationEl.classList.remove('empty');
+      } else {
+        locationEl.textContent = 'No location specified';
+        locationEl.classList.add('empty');
+      }
+
+      const descEl = document.getElementById('detailDescription');
+      if (event.description) {
+        descEl.textContent = event.description;
+        descEl.classList.remove('empty');
+      } else {
+        descEl.textContent = 'No description';
+        descEl.classList.add('empty');
+      }
+
+      // Show modal
+      document.getElementById('eventModal').classList.add('show');
+
+      // Reset to view mode
+      exitEditMode();
+    }
+
+    function closeEventModal() {
+      document.getElementById('eventModal').classList.remove('show');
+      currentEvent = null;
+      exitEditMode();
+    }
+
+    function enterEditMode() {
+      if (!currentEvent) return;
+
+      // Populate edit form
+      document.getElementById('editTitle').value = currentEvent.title || '';
+      document.getElementById('editLocation').value = currentEvent.location || '';
+      document.getElementById('editDescription').value = currentEvent.description || '';
+      document.getElementById('editDuration').value = currentEvent.duration || 60;
+
+      // Parse date and time from startDateTime
+      if (currentEvent.startDateTime) {
+        const startDate = new Date(currentEvent.startDateTime);
+        const year = startDate.getFullYear();
+        const month = String(startDate.getMonth() + 1).padStart(2, '0');
+        const day = String(startDate.getDate()).padStart(2, '0');
+        const hours = String(startDate.getHours()).padStart(2, '0');
+        const minutes = String(startDate.getMinutes()).padStart(2, '0');
+
+        document.getElementById('editDate').value = `${year}-${month}-${day}`;
+        document.getElementById('editTime').value = `${hours}:${minutes}`;
+      }
+
+      // Toggle view/edit modes
+      document.getElementById('viewMode').style.display = 'none';
+      document.getElementById('editMode').classList.add('active');
+      document.getElementById('viewModeButtons').style.display = 'none';
+      document.getElementById('editModeButtons').style.display = 'flex';
+    }
+
+    function cancelEdit() {
+      exitEditMode();
+    }
+
+    function exitEditMode() {
+      document.getElementById('viewMode').style.display = 'block';
+      document.getElementById('editMode').classList.remove('active');
+      document.getElementById('viewModeButtons').style.display = 'flex';
+      document.getElementById('editModeButtons').style.display = 'none';
+    }
+
+    async function saveEvent() {
+      if (!currentEvent) return;
+
+      // Get form values
+      const title = document.getElementById('editTitle').value.trim();
+      const date = document.getElementById('editDate').value;
+      const time = document.getElementById('editTime').value;
+      const duration = parseInt(document.getElementById('editDuration').value) || 60;
+      const location = document.getElementById('editLocation').value.trim();
+      const description = document.getElementById('editDescription').value.trim();
+
+      // Validate required fields
+      if (!title) {
+        alert('Please enter an event title');
+        return;
+      }
+      if (!date) {
+        alert('Please select a date');
+        return;
+      }
+      if (!time) {
+        alert('Please select a time');
+        return;
+      }
+
+      // Disable save button
+      const saveButton = event.target;
+      if (saveButton) saveButton.disabled = true;
+
+      try {
+        // Calculate start and end times
+        const startDateTime = new Date(`${date}T${time}:00`);
+        const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+        const response = await fetch('/api/events/' + currentEvent.id, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            summary: title,
+            startDateTime: startDateTime.toISOString(),
+            endDateTime: endDateTime.toISOString(),
+            location: location || undefined,
+            description: description || undefined
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update event');
+        }
+
+        // Reload events and close modal
+        await loadUpcomingEvents();
+        closeEventModal();
+
+      } catch (error) {
+        console.error('Error updating event:', error);
+        alert('Failed to update event. Please try again.');
+      } finally {
+        if (saveButton) saveButton.disabled = false;
+      }
+    }
+
+    function confirmDelete() {
+      if (!currentEvent) return;
+
+      document.getElementById('deleteEventName').textContent = currentEvent.title || 'this event';
+      document.getElementById('deleteModal').classList.add('show');
+    }
+
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('show');
+    }
+
+    async function deleteEvent() {
+      if (!currentEvent) return;
+
+      try {
+        const response = await fetch('/api/events/' + currentEvent.id, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete event');
+        }
+
+        // Close both modals
+        closeDeleteModal();
+        closeEventModal();
+
+        // Reload events
+        await loadUpcomingEvents();
+
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Failed to delete event. Please try again.');
+      }
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('eventModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeEventModal();
+      }
+    });
+
+    document.getElementById('deleteModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeDeleteModal();
+      }
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeEventModal();
+        closeDeleteModal();
+      }
+    });
   </script>
 </body>
 </html>

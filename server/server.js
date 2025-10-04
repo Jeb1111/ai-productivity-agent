@@ -78,8 +78,24 @@ app.post("/chat", async (req, res) => {
     let sessionState = getSession(sessionId);
     sessionState.activeEvents = sessionState.activeEvents || [];
 
+    // CRITICAL: Check if there's an active event creation in progress BEFORE parsing
+    const hasActiveEventCreation = sessionState.activeEvents &&
+                                    sessionState.activeEvents.some(e => !e.confirmed && !e.preConfirmed);
+
     // Parse intent and fields
     const parsed = await intentHandler(message, sessionState);
+
+    // If there's an active event creation and the message looks like just time/date info
+    // Override any reschedule intent to create_event instead
+    if (hasActiveEventCreation && (parsed.time || parsed.date) &&
+        parsed.intent !== "create_event" && parsed.intent !== "cancel") {
+      // Check if message is just a simple time (like "6pm", "3:30pm", "18:00")
+      const simpleTimePattern = /^\s*(\d{1,2})(:\d{2})?\s*(am|pm|AM|PM)?\s*$/i;
+      if (simpleTimePattern.test(message.trim())) {
+        parsed.intent = "create_event";
+        // Don't clear the title - it will be merged with the existing event in create_event logic
+      }
+    }
 
     // Handle email sending intent
     if (parsed.intent === "send_email") {
@@ -129,8 +145,10 @@ app.post("/chat", async (req, res) => {
     if (parsed.intent === "create_event") {
       let currentEvent = getUnconfirmedEvent(sessionState);
 
-      // Only clear existing event if we have new event details AND no confirmation response
-      if ((parsed.title || parsed.date || parsed.time) && !parsed.confirmation_response) {
+      // Only clear existing event if we have a NEW title (indicating a completely new event request)
+      // AND no confirmation response AND the event hasn't been pre-confirmed
+      const hasNewTitle = parsed.title && (!currentEvent || parsed.title !== currentEvent.title);
+      if (hasNewTitle && !parsed.confirmation_response) {
         if (currentEvent && !currentEvent.preConfirmed) {
           sessionState.activeEvents = sessionState.activeEvents.filter(e => e.confirmed);
           currentEvent = null;
@@ -245,8 +263,13 @@ app.post("/chat", async (req, res) => {
       let eventToDelete = null;
 
       try {
-        // If a specific title is mentioned, search for it in Google Calendar
-        if (parsed.title) {
+        // Detect generic references like "next event", "my event", "upcoming event", etc.
+        const genericRefs = /\b(next|upcoming|my|the|latest|recent|last created|first)\s*(event|appointment|meeting)?\b/i;
+        const isGenericRef = !parsed.title || genericRefs.test(parsed.title) ||
+                           parsed.title.match(/^(it|that|this|event|appointment|meeting)$/i);
+
+        // If a specific title is mentioned (and not a generic reference), search for it
+        if (parsed.title && !isGenericRef) {
           const calendarEvents = await searchCalendarEvents(parsed.title, 10);
           const matchingEvent = calendarEvents.find(event =>
             event.summary && event.summary.toLowerCase().includes(parsed.title.toLowerCase())
@@ -261,13 +284,29 @@ app.post("/chat", async (req, res) => {
           }
         }
 
-        // Fallback to lastEvent if no specific event found
+        // Handle generic references or fallback: get the next upcoming event
+        if (!eventToDelete) {
+          // Try to get upcoming events
+          const upcomingEvents = await searchCalendarEvents(null, 5);
+
+          if (upcomingEvents && upcomingEvents.length > 0) {
+            // Get the first (soonest) upcoming event
+            const nextEvent = upcomingEvents[0];
+            eventToDelete = {
+              google_event_id: nextEvent.eventId,
+              title: nextEvent.summary,
+              startDateTime: nextEvent.startDateTime
+            };
+          }
+        }
+
+        // Final fallback to lastEvent if still nothing found
         if (!eventToDelete && sessionState.lastEvent && sessionState.lastEvent.google_event_id) {
           eventToDelete = sessionState.lastEvent;
         }
 
         if (!eventToDelete) {
-          parsed.reply = "I couldn't find any event to cancel. Please specify which event you'd like to cancel (e.g., 'delete my lunch event').";
+          parsed.reply = "I couldn't find any events to cancel. Your calendar appears to be empty.";
           saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         }
@@ -666,11 +705,22 @@ app.get("/api/upcoming-events", async (req, res) => {
         });
       };
 
+      const duration = Math.round((endTime - startTime) / 60000); // duration in minutes
+
       return {
         id: event.id,
         title: event.summary || 'Untitled Event',
         time: `${formatTime(startTime)} - ${formatTime(endTime)}`,
-        date: formatDate(startTime)
+        date: formatDate(startTime),
+        fullDateTime: startTime.toLocaleString('en-US', {
+          dateStyle: 'long',
+          timeStyle: 'short'
+        }),
+        startDateTime: event.start.dateTime || event.start.date,
+        endDateTime: event.end.dateTime || event.end.date,
+        location: event.location || '',
+        description: event.description || '',
+        duration: duration
       };
     });
 
@@ -681,8 +731,77 @@ app.get("/api/upcoming-events", async (req, res) => {
   }
 });
 
+// Update event endpoint
+app.put("/api/events/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { summary, startDateTime, endDateTime, location, description } = req.body;
+
+    // Validate required fields
+    if (!summary || !startDateTime || !endDateTime) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    const eventUpdate = {
+      summary,
+      start: {
+        dateTime: startDateTime,
+        timeZone: 'Australia/Sydney'
+      },
+      end: {
+        dateTime: endDateTime,
+        timeZone: 'Australia/Sydney'
+      }
+    };
+
+    // Add optional fields if provided
+    if (location) eventUpdate.location = location;
+    if (description) eventUpdate.description = description;
+
+    await calendar.events.update({
+      calendarId: 'primary',
+      eventId: eventId,
+      requestBody: eventUpdate
+    });
+
+    res.json({ success: true, message: "Event updated successfully" });
+  } catch (error) {
+    console.error("Error updating event:", error);
+    res.status(500).json({ error: "Failed to update event" });
+  }
+});
+
+// Delete event endpoint
+app.delete("/api/events/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    await calendar.events.delete({
+      calendarId: 'primary',
+      eventId: eventId
+    });
+
+    res.json({ success: true, message: "Event deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting event:", error);
+
+    // Handle specific error cases
+    if (error.code === 404 || error.code === 410) {
+      return res.status(404).json({ error: "Event not found or already deleted" });
+    }
+
+    res.status(500).json({ error: "Failed to delete event" });
+  }
+});
+
 // Health check
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.send("BuddyBoi Server is running!");
 });
 
