@@ -20,7 +20,13 @@ export function saveToken(token) {
 export function getAuthClient() {
   const credentials = loadCredentials();
   const { client_secret, client_id, redirect_uris } = credentials.web;
-  
+
+  // Check for placeholder values
+  if (client_id.includes('REPLACE_WITH_YOUR_CLIENT_ID') ||
+      client_secret.includes('REPLACE_WITH_YOUR_CLIENT_SECRET')) {
+    throw new Error('Please replace placeholder values in credentials.json with actual Google OAuth credentials from Google Cloud Console');
+  }
+
   const oAuth2Client = new google.auth.OAuth2(
     client_id,
     client_secret,

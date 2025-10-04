@@ -72,12 +72,14 @@ function localParse(message, session = {}) {
   const recipientMatch = raw.match(/(?:send email to|email)\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i);
   if (recipientMatch) res.email_recipient = recipientMatch[1].toLowerCase();
 
-  // Intent detection for personal productivity
+  // Intent detection for personal productivity - enhanced delete/cancel recognition
   if (/\b(send email|email|compose|draft)\b/.test(lower)) {
     res.intent = "send_email";
-  } else if (/\b(cancel|delete|remove)\b/.test(lower)) {
+  } else if (/\b(cancel|delete|remove|clear|erase|drop|eliminate|destroy)\b/.test(lower)) {
     res.intent = "cancel";
   } else if (/\b(resched|reschedule|move|change|shift)\b/.test(lower)) {
+    res.intent = "reschedule";
+  } else if (/\bmove\b.*\b(to|at)\b/.test(lower)) {
     res.intent = "reschedule";
   } else if (/\b(create|add|schedule|book|make|plan|set up)\b.*\b(event|appointment|meeting|reminder)\b/.test(lower)) {
     res.intent = "create_event";
@@ -87,8 +89,26 @@ function localParse(message, session = {}) {
 
   // Extract event title from various patterns
   const titlePatterns = [
+    // Create/add patterns
     /(?:create|add|schedule|book|make|plan|set up)\s+(?:a\s+|an\s+)?(?:event|appointment|meeting|reminder)\s+(?:for\s+|called\s+|titled\s+)?["']?([^"'\n,]+)["']?/i,
     /(?:meeting|event|appointment)\s+(?:about|for|with|called)\s+["']?([^"'\n,]+)["']?/i,
+
+    // Delete/cancel patterns - comprehensive and robust
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?(?:my\s+)?["']([^"']+)["']\s*(?:event|appointment|meeting)?/i,  // "delete the "TEST123" event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?([A-Z0-9]+)\s+(?:event|appointment|meeting)/i,  // "delete the TEST123 event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:my\s+)?(?:the\s+)?([^,\s]+(?:\s+[^,\s]+)*?)\s+(?:event|appointment|meeting)/i,  // "delete my test meeting event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?(?:my\s+)?([^,\s]+(?:\s+[^,\s]+)*?)$/i,  // "delete TEST123" or "delete the event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:tomorrow'?s?|today'?s?)\s+([^,\s]+(?:\s+[^,\s]+)*?)(?:\s+(?:event|appointment|meeting))?/i,  // "delete tomorrow's event"
+    /(?:cancel|delete|remove|clear|erase|drop|eliminate|destroy)\s+(?:the\s+)?([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*?)\s*(?:event|appointment|meeting)?/i,  // More flexible alphanumeric matching
+
+    // Reschedule patterns - enhanced for ambiguous references
+    /(?:move|reschedule|shift)\s+(?:my\s+)?([^,\s]+(?:\s+[^,\s]+)*?)(?:\s+(?:to|at|from))/i,
+    /(?:move|reschedule|shift)\s+(it|that|this|the\s+(?:event|meeting|appointment))\s+(?:to|at)/i, // "move it to", "reschedule the event to"
+
+    // General patterns with timing
+    /([^,\s]+(?:\s+[^,\s]+)*?)\s+(?:at\s+\d)/i,
+
+    // Quoted strings (high priority)
     /"([^"]+)"/,
     /'([^']+)'/
   ];
@@ -112,14 +132,46 @@ function localParse(message, session = {}) {
     if (bodyMatch) res.email_body = bodyMatch[1].trim();
   }
 
-  // Handle confirmations
+  // Handle confirmations - check for pending operations first
   const yn = detectYesNo(raw);
-  const inProgress = (session.activeEvents || []).slice(-1)[0] || null;
-  if (inProgress && inProgress.preConfirmed && !inProgress.confirmed && yn) {
-    res.intent = "create_event";
-    res.confirmation_response = yn;
-    res.reply = yn === "yes" ? "Creating event." : "Making changes to event.";
-    return res;
+  const inProgressEvent = (session.activeEvents || []).find(e => e.preConfirmed && !e.confirmed) || null;
+  const inProgressReschedule = session.rescheduleState && session.rescheduleState.preConfirmed;
+
+
+  // Simple yes/no responses - be very specific about context
+  if ((lower === "yes" || lower === "no" || lower === "y" || lower === "n") && yn) {
+    // PRIORITY 1: If there's an active reschedule waiting for confirmation
+    if (inProgressReschedule) {
+      res.intent = "reschedule";
+      res.confirmation_response = yn;
+      res.reply = yn === "yes" ? "Rescheduling event." : "Making changes to reschedule.";
+      return res;
+    }
+
+    // PRIORITY 2: If there's an active event creation waiting for confirmation
+    if (inProgressEvent && !inProgressReschedule) {
+      res.intent = "create_event";
+      res.confirmation_response = yn;
+      res.reply = yn === "yes" ? "Creating event." : "Making changes to event.";
+      return res;
+    }
+  }
+
+  // More detailed confirmations with additional words
+  if (yn) {
+    if (inProgressReschedule && (lower.includes("confirm") || lower.includes("reschedule") || lower === "yes")) {
+      res.intent = "reschedule";
+      res.confirmation_response = yn;
+      res.reply = yn === "yes" ? "Rescheduling event." : "Making changes to reschedule.";
+      return res;
+    }
+
+    if (inProgressEvent && !inProgressReschedule && (lower.includes("confirm") || lower.includes("create") || lower === "yes")) {
+      res.intent = "create_event";
+      res.confirmation_response = yn;
+      res.reply = yn === "yes" ? "Creating event." : "Making changes to event.";
+      return res;
+    }
   }
 
   // Date/time parsing with chrono
@@ -142,9 +194,18 @@ async function llmParse(message, session = {}) {
   const systemPrompt = `
 You are a personal productivity assistant that helps with calendar events and email management.
 Today's date: ${today} in ${TIMEZONE}.
-Context:
+
+IMPORTANT CONTEXT for understanding conversational references:
 - Active events: ${JSON.stringify(session.activeEvents || [])}
-- Last event: ${JSON.stringify(session.lastEvent || null)}
+- Last event mentioned/created: ${JSON.stringify(session.lastEvent || null)}
+- Current reschedule in progress: ${JSON.stringify(session.rescheduleState || null)}
+
+CONVERSATIONAL INTELLIGENCE RULES:
+1. When user says "it", "that", "the event", "the meeting" without specifying a title, they usually mean the most recent event (lastEvent)
+2. If only time is mentioned (like "4pm", "8pm"), default to TODAY if time hasn't passed, or TOMORROW if it has
+3. When user says "move it to 8pm" after previously mentioning an event, use that event's title
+4. Handle partial information gracefully - don't require every field to be specified in one message
+5. Understand context from previous messages in the same session
 
 Return JSON only using this schema:
 {
@@ -168,6 +229,28 @@ Examples:
 - "Create a meeting called 'Team Standup' tomorrow at 2pm" → intent: "create_event", title: "Team Standup", date: "2025-09-25", time: "14:00"
 - "Schedule dentist appointment for Friday at 10am" → intent: "create_event", title: "dentist appointment", date: "2025-09-27", time: "10:00"
 - "What's my schedule for today?" → intent: "check_schedule", date: "2025-09-24"
+
+RESCHEDULE EXAMPLES (using context):
+- "Move training to 4pm" → intent: "reschedule", title: "training", time: "16:00" (infer date from context)
+- "move it to 8pm" (when lastEvent is "training") → intent: "reschedule", title: "training", time: "20:00"
+- "reschedule the meeting to tomorrow at 3pm" → intent: "reschedule", title: "meeting", date: "2025-09-25", time: "15:00"
+- "shift it to 5pm tomorrow" (using lastEvent context) → intent: "reschedule", title: from_lastEvent, date: "2025-09-25", time: "17:00"
+
+CONVERSATIONAL CONTEXT EXAMPLES:
+- After creating "Training" event, user says "move it to 8pm" → intent: "reschedule", title: "Training", time: "20:00"
+- "cancel the event" (when lastEvent exists) → intent: "cancel", title: from_lastEvent
+- "what time is it at?" (referring to lastEvent) → intent: "check_schedule", title: from_lastEvent
+
+CONFIRMATION EXAMPLES:
+- "yes" (when user has pending event) → intent: "create_event", confirmation_response: "yes"
+- "no" (when user has pending event) → intent: "create_event", confirmation_response: "no"
+
+CRITICAL PRIORITY RULES:
+1. RESCHEDULE CONFIRMATION: If rescheduleState exists with preConfirmed=true and user says "yes"/"no", set intent="reschedule" with confirmation_response
+2. EVENT CREATION CONFIRMATION: If NO reschedule is pending AND there are active events with preConfirmed=true awaiting confirmation, set intent="create_event"
+3. CONTEXT MATTERS: Simple "yes"/"no" should be routed based on what operation is actually pending
+4. NEVER create reschedule intent unless user explicitly mentions moving/rescheduling OR confirming an existing reschedule
+5. For simple confirmations, check what the user is actually confirming
 `;
 
   const messages = [

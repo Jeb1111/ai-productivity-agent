@@ -81,3 +81,51 @@ export async function deleteCalendarEvent(eventId) {
     throw new Error(`Failed to delete calendar event: ${error.message}`);
   }
 }
+
+export async function searchCalendarEvents(titleQuery = null, maxResults = 50) {
+  try {
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    const params = {
+      calendarId: "primary",
+      timeMin: new Date().toISOString(),
+      maxResults: maxResults,
+      singleEvents: true,
+      orderBy: "startTime"
+    };
+
+    if (titleQuery) {
+      params.q = titleQuery;
+    }
+
+    const response = await calendar.events.list(params);
+    const events = response.data.items || [];
+
+    return events.map(event => {
+      const startDateTime = event.start?.dateTime || event.start?.date;
+      const endDateTime = event.end?.dateTime || event.end?.date;
+
+      // Calculate duration in minutes
+      let duration_minutes = 60; // Default duration
+      if (startDateTime && endDateTime) {
+        const start = new Date(startDateTime);
+        const end = new Date(endDateTime);
+        duration_minutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+      }
+
+      return {
+        eventId: event.id,
+        summary: event.summary || 'No title',
+        startDateTime: startDateTime,
+        endDateTime: endDateTime,
+        duration_minutes: duration_minutes,
+        description: event.description || null
+      };
+    });
+
+  } catch (error) {
+    console.error("Calendar search error:", error);
+    throw new Error(`Failed to search calendar events: ${error.message}`);
+  }
+}

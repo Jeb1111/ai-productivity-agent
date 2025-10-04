@@ -5,10 +5,10 @@ import dotenv from "dotenv";
 import { google } from "googleapis";
 import { getAuthClient, saveToken } from "./utils/googleAuth.js";
 import { intentHandler } from "./services/intentHandler.js";
-import { getDB, initDB } from "./models/database.js";
+// Database removed - using in-memory session storage
 import { v4 as uuidv4 } from "uuid";
 import { sendGmailEmail, draftGmailEmail } from "./services/gmailService.js";
-import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent } from "./services/calendarService.js";
+import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, searchCalendarEvents } from "./services/calendarService.js";
 import path from "path";
 
 dotenv.config();
@@ -20,8 +20,8 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
-// Initialize database
-await initDB();
+// In-memory session storage
+const sessions = new Map();
 
 // Helper functions
 function formatFriendly(dateStr, timeStr) {
@@ -45,14 +45,16 @@ function getUnconfirmedEvent(sessionState) {
   return sessionState.activeEvents.find((e) => !e.confirmed) || null;
 }
 
-async function saveSession(db, sessionId, sessionState) {
-  const s = JSON.stringify(sessionState);
-  const row = await db.get("SELECT 1 FROM sessions WHERE session_id = ?", sessionId);
-  if (row) {
-    await db.run("UPDATE sessions SET state = ?, updated_at = CURRENT_TIMESTAMP WHERE session_id = ?", s, sessionId);
-  } else {
-    await db.run("INSERT INTO sessions (session_id, state) VALUES (?, ?)", sessionId, s);
-  }
+function saveSession(sessionId, sessionState) {
+  sessions.set(sessionId, {
+    state: sessionState,
+    updatedAt: new Date()
+  });
+}
+
+function getSession(sessionId) {
+  const session = sessions.get(sessionId);
+  return session ? session.state : {};
 }
 
 function extractYesNo(msg) {
@@ -73,9 +75,7 @@ app.post("/chat", async (req, res) => {
   if (!sessionId) sessionId = uuidv4();
 
   try {
-    const db = await getDB();
-    const sessionRow = await db.get("SELECT * FROM sessions WHERE session_id = ?", sessionId);
-    let sessionState = sessionRow ? JSON.parse(sessionRow.state) : {};
+    let sessionState = getSession(sessionId);
     sessionState.activeEvents = sessionState.activeEvents || [];
 
     // Parse intent and fields
@@ -85,13 +85,13 @@ app.post("/chat", async (req, res) => {
     if (parsed.intent === "send_email") {
       if (!parsed.email_recipient) {
         parsed.reply = "Who would you like to send the email to? Please provide their email address.";
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
       if (!parsed.email_body && !parsed.email_subject) {
         parsed.reply = `What would you like to say in the email to ${parsed.email_recipient}?`;
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
@@ -103,29 +103,34 @@ app.post("/chat", async (req, res) => {
           body: parsed.email_body || "Hello!"
         });
 
-        // Log email in database for tracking
-        await db.run(
-          "INSERT INTO email_logs (recipient, subject, status) VALUES (?, ?, ?)",
-          [parsed.email_recipient, parsed.email_subject || "Message from AI Assistant", "sent"]
-        );
+        // Email logged in Gmail's Sent folder automatically
 
         parsed.reply = `Email sent to ${parsed.email_recipient} successfully!`;
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
 
       } catch (emailError) {
         console.error("Email send failed:", emailError);
         parsed.reply = `Failed to send email to ${parsed.email_recipient}. Please try again or check your Gmail authorization.`;
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
     }
 
     // Handle create event intent
     if (parsed.intent === "create_event") {
+      // Critical: If there's an active reschedule, don't process create_event
+      if (sessionState.rescheduleState && sessionState.rescheduleState.preConfirmed) {
+        // Redirect to reschedule logic
+        parsed.intent = "reschedule";
+      }
+    }
+
+    if (parsed.intent === "create_event") {
       let currentEvent = getUnconfirmedEvent(sessionState);
 
-      if (parsed.title || parsed.date || parsed.time) {
+      // Only clear existing event if we have new event details AND no confirmation response
+      if ((parsed.title || parsed.date || parsed.time) && !parsed.confirmation_response) {
         if (currentEvent && !currentEvent.preConfirmed) {
           sessionState.activeEvents = sessionState.activeEvents.filter(e => e.confirmed);
           currentEvent = null;
@@ -146,25 +151,29 @@ app.post("/chat", async (req, res) => {
         };
       }
 
-      // Merge parsed info
-      currentEvent.title = parsed.title || currentEvent.title;
-      currentEvent.date = parsed.date || currentEvent.date;
-      currentEvent.time = parsed.time || currentEvent.time;
-      currentEvent.duration_minutes = parsed.duration_minutes || currentEvent.duration_minutes;
-      currentEvent.notes = parsed.notes || currentEvent.notes;
+      // Only merge parsed info if we're not handling a confirmation response
+      if (!parsed.confirmation_response) {
+        currentEvent.title = parsed.title || currentEvent.title;
+        currentEvent.date = parsed.date || currentEvent.date;
+        currentEvent.time = parsed.time || currentEvent.time;
+        currentEvent.duration_minutes = parsed.duration_minutes || currentEvent.duration_minutes;
+        currentEvent.notes = parsed.notes || currentEvent.notes;
 
-      updateEventInSession(sessionState, currentEvent);
+        updateEventInSession(sessionState, currentEvent);
+      }
 
-      // Check for missing fields
-      const missing = [];
-      if (!currentEvent.title) missing.push("event title");
-      if (!currentEvent.date) missing.push("date");
-      if (!currentEvent.time) missing.push("time");
+      // Check for missing fields (skip if handling confirmation)
+      if (!parsed.confirmation_response) {
+        const missing = [];
+        if (!currentEvent.title) missing.push("event title");
+        if (!currentEvent.date) missing.push("date");
+        if (!currentEvent.time) missing.push("time");
 
-      if (missing.length) {
-        parsed.reply = `Please provide the following: ${missing.join(", ")}.`;
-        await saveSession(db, sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+        if (missing.length) {
+          parsed.reply = `Please provide the following: ${missing.join(", ")}.`;
+          saveSession(sessionId, sessionState);
+          return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+        }
       }
 
       // If all info present and not yet preConfirmed
@@ -172,7 +181,7 @@ app.post("/chat", async (req, res) => {
         currentEvent.preConfirmed = true;
         updateEventInSession(sessionState, currentEvent);
         parsed.reply = `I'll create **${currentEvent.title}** on **${formatFriendly(currentEvent.date, currentEvent.time)}**. Would you like to confirm? (yes/no)`;
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
@@ -200,7 +209,7 @@ app.post("/chat", async (req, res) => {
 
             let replyMsg = `Your event "${currentEvent.title}" is confirmed for ${formatFriendly(currentEvent.date, currentEvent.time)}.`;
 
-            await saveSession(db, sessionId, sessionState);
+            saveSession(sessionId, sessionState);
             return res.json({ reply: replyMsg, state: sessionState, sessionId });
 
           } catch (calendarError) {
@@ -213,7 +222,7 @@ app.post("/chat", async (req, res) => {
               errorMessage = "Calendar authorization expired. Please re-authorize by visiting /auth";
             }
 
-            await saveSession(db, sessionId, sessionState);
+            saveSession(sessionId, sessionState);
             return res.json({ reply: errorMessage, state: sessionState, sessionId });
           }
 
@@ -221,11 +230,11 @@ app.post("/chat", async (req, res) => {
           currentEvent.preConfirmed = false;
           updateEventInSession(sessionState, currentEvent);
           parsed.reply = "No problem - what would you like to change? (title / date / time / notes)";
-          await saveSession(db, sessionId, sessionState);
+          saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         } else {
           parsed.reply = "Please reply 'yes' to confirm or 'no' to make changes.";
-          await saveSession(db, sessionId, sessionState);
+          saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         }
       }
@@ -233,32 +242,82 @@ app.post("/chat", async (req, res) => {
 
     // Handle cancel intent
     else if (parsed.intent === "cancel") {
-      // For personal productivity, we'll work with calendar events directly
-      if (!sessionState.lastEvent || !sessionState.lastEvent.google_event_id) {
-        parsed.reply = "I don't see any recent events to cancel. Please specify which event you'd like to cancel (title and date).";
-        await saveSession(db, sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-      }
+      let eventToDelete = null;
 
       try {
-        // Remove from Google Calendar
-        await deleteCalendarEvent(sessionState.lastEvent.google_event_id);
+        // If a specific title is mentioned, search for it in Google Calendar
+        if (parsed.title) {
+          const calendarEvents = await searchCalendarEvents(parsed.title, 10);
+          const matchingEvent = calendarEvents.find(event =>
+            event.summary && event.summary.toLowerCase().includes(parsed.title.toLowerCase())
+          );
+
+          if (matchingEvent) {
+            eventToDelete = {
+              google_event_id: matchingEvent.eventId,
+              title: matchingEvent.summary,
+              startDateTime: matchingEvent.startDateTime
+            };
+          }
+        }
+
+        // Fallback to lastEvent if no specific event found
+        if (!eventToDelete && sessionState.lastEvent && sessionState.lastEvent.google_event_id) {
+          eventToDelete = sessionState.lastEvent;
+        }
+
+        if (!eventToDelete) {
+          parsed.reply = "I couldn't find any event to cancel. Please specify which event you'd like to cancel (e.g., 'delete my lunch event').";
+          saveSession(sessionId, sessionState);
+          return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+        }
+
+        // Delete from Google Calendar
+        await deleteCalendarEvent(eventToDelete.google_event_id);
 
         // Update session state
-        sessionState.activeEvents = sessionState.activeEvents.filter(e => e.google_event_id !== sessionState.lastEvent.google_event_id);
-        const eventTitle = sessionState.lastEvent.title;
-        const eventDate = formatFriendly(sessionState.lastEvent.date, sessionState.lastEvent.time);
-        sessionState.lastEvent = null;
+        sessionState.activeEvents = sessionState.activeEvents.filter(e =>
+          e.google_event_id !== eventToDelete.google_event_id
+        );
 
-        let replyMsg = `Your event "${eventTitle}" on ${eventDate} has been cancelled.`;
+        // Clear lastEvent if it matches
+        if (sessionState.lastEvent && sessionState.lastEvent.google_event_id === eventToDelete.google_event_id) {
+          sessionState.lastEvent = null;
+        }
 
-        await saveSession(db, sessionId, sessionState);
+        // Format the event time for display
+        let eventTimeStr = "unknown time";
+        if (eventToDelete.startDateTime) {
+          const startDate = new Date(eventToDelete.startDateTime);
+          eventTimeStr = startDate.toLocaleString("en-AU", {
+            dateStyle: "long",
+            timeStyle: "short",
+            timeZone: "Australia/Sydney"
+          });
+        } else if (eventToDelete.date && eventToDelete.time) {
+          eventTimeStr = formatFriendly(eventToDelete.date, eventToDelete.time);
+        }
+
+        let replyMsg = `Your event "${eventToDelete.title}" on ${eventTimeStr} has been cancelled.`;
+
+        saveSession(sessionId, sessionState);
         return res.json({ reply: replyMsg, state: sessionState, sessionId });
 
       } catch (calErr) {
         console.error("Calendar delete failed:", calErr.message);
-        parsed.reply = "Unable to cancel the event. Please try again or check your calendar authorization.";
-        await saveSession(db, sessionId, sessionState);
+
+        // Handle specific error cases
+        let errorMsg = "Unable to cancel the event.";
+        if (calErr.message.includes("Resource has been deleted") || calErr.code === 410) {
+          errorMsg = "This event has already been deleted from your calendar.";
+        } else if (calErr.message.includes("Not Found") || calErr.code === 404) {
+          errorMsg = "The event was not found in your calendar (it may have already been deleted).";
+        } else {
+          errorMsg = "Unable to cancel the event. Please try again or check your calendar authorization.";
+        }
+
+        parsed.reply = errorMsg;
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
     }
@@ -266,54 +325,156 @@ app.post("/chat", async (req, res) => {
     // Handle reschedule intent
     else if (parsed.intent === "reschedule") {
       let rescheduleState = sessionState.rescheduleState || null;
-      
+
       if (!rescheduleState) {
         rescheduleState = {
-          originalAppointment: null,
+          originalEvent: null,
           newDate: null,
           newTime: null,
           preConfirmed: false
         };
-        
-        // Find appointment to reschedule
-        if (parsed.service && parsed.date) {
-          rescheduleState.originalAppointment = await db.get(
-            `SELECT * FROM appointments WHERE user_id = ? AND service = ? AND date = ?`,
-            [sessionState.user_id, parsed.service, parsed.date]
-          );
-        }
-        
-        if (!rescheduleState.originalAppointment && sessionState.lastAppointment && sessionState.lastAppointment.db_id) {
-          rescheduleState.originalAppointment = await db.get("SELECT * FROM appointments WHERE id = ?", sessionState.lastAppointment.db_id);
-        }
-        
-        if (!rescheduleState.originalAppointment) {
-          parsed.reply = "I couldn't find the appointment to reschedule. Please specify which appointment (service + current date).";
-          await saveSession(db, sessionId, sessionState);
+
+        // Find event to reschedule from Google Calendar
+        let eventToReschedule = null;
+
+        try {
+          // Search Google Calendar for events
+          let calendarEvents = [];
+
+          if (parsed.title) {
+            // Search with specific title first
+            calendarEvents = await searchCalendarEvents(parsed.title, 10);
+          }
+
+          // If no specific title match or no title provided, get all upcoming events
+          if (calendarEvents.length === 0) {
+            calendarEvents = await searchCalendarEvents(null, 20);
+          }
+
+          // If we have a specific title from the request, try to match it
+          if (parsed.title && calendarEvents.length > 0) {
+            const matchingEvent = calendarEvents.find(event =>
+              event.summary &&
+              event.summary.toLowerCase().includes(parsed.title.toLowerCase())
+            );
+            if (matchingEvent) {
+              eventToReschedule = {
+                google_event_id: matchingEvent.eventId,
+                title: matchingEvent.summary,
+                startDateTime: matchingEvent.startDateTime,
+                endDateTime: matchingEvent.endDateTime,
+                duration_minutes: matchingEvent.duration_minutes
+              };
+            }
+          }
+
+          // If still no event found but we have calendar events, check session lastEvent
+          if (!eventToReschedule && sessionState.lastEvent && sessionState.lastEvent.google_event_id) {
+            // Try to find the lastEvent in current calendar events
+            const lastEventInCalendar = calendarEvents.find(event =>
+              event.eventId === sessionState.lastEvent.google_event_id
+            );
+            if (lastEventInCalendar) {
+              eventToReschedule = {
+                google_event_id: lastEventInCalendar.eventId,
+                title: lastEventInCalendar.summary,
+                startDateTime: lastEventInCalendar.startDateTime,
+                endDateTime: lastEventInCalendar.endDateTime,
+                duration_minutes: lastEventInCalendar.duration_minutes
+              };
+            }
+          }
+
+          // If still no specific match, use the first upcoming event if there's only one
+          if (!eventToReschedule && calendarEvents.length === 1) {
+            const event = calendarEvents[0];
+            eventToReschedule = {
+              google_event_id: event.eventId,
+              title: event.summary,
+              startDateTime: event.startDateTime,
+              endDateTime: event.endDateTime,
+              duration_minutes: event.duration_minutes
+            };
+          } else if (!eventToReschedule && calendarEvents.length > 1) {
+            // Multiple events - ask user to be more specific
+            const eventList = calendarEvents.slice(0, 5).map(e => {
+              const startDate = new Date(e.startDateTime);
+              return `"${e.summary}" on ${startDate.toLocaleDateString('en-AU')} at ${startDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`;
+            }).join(", ");
+            parsed.reply = `I found multiple events. Which one would you like to reschedule? ${eventList}`;
+            saveSession(sessionId, sessionState);
+            return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+          }
+
+        } catch (error) {
+          console.error("Error searching calendar events:", error);
+          parsed.reply = "I had trouble accessing your calendar. Please try again.";
+          saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         }
+
+        if (!eventToReschedule) {
+          parsed.reply = "I couldn't find any events to reschedule. Please create an event first or be more specific about which event you want to move.";
+          saveSession(sessionId, sessionState);
+          return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+        }
+
+        rescheduleState.originalEvent = eventToReschedule;
       }
       
       // Update with new date/time
       rescheduleState.newDate = parsed.date || rescheduleState.newDate;
       rescheduleState.newTime = parsed.time || rescheduleState.newTime;
       sessionState.rescheduleState = rescheduleState;
-      
+
+      // Smart date defaulting when only time is provided
+      if (!rescheduleState.newDate && rescheduleState.newTime) {
+        const now = new Date();
+        const currentTime = now.getHours() * 60 + now.getMinutes();
+        const [hours, minutes] = rescheduleState.newTime.split(':').map(Number);
+        const newTimeInMinutes = hours * 60 + minutes;
+
+        // If the time is later today, use today; otherwise use tomorrow
+        if (newTimeInMinutes > currentTime + 30) { // 30 minute buffer
+          rescheduleState.newDate = now.toISOString().split('T')[0];
+        } else {
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          rescheduleState.newDate = tomorrow.toISOString().split('T')[0];
+        }
+      }
+
+      // Enhanced context-aware error messages
       if (!rescheduleState.newDate || !rescheduleState.newTime) {
-        parsed.reply = "What's the new date and time you'd like to move the appointment to?";
-        await saveSession(db, sessionId, sessionState);
+        let missingInfo = [];
+        if (!rescheduleState.newDate) missingInfo.push("date");
+        if (!rescheduleState.newTime) missingInfo.push("time");
+
+        const eventName = rescheduleState.originalEvent?.title || "the event";
+        parsed.reply = `What ${missingInfo.join(" and ")} would you like to move "${eventName}" to?`;
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
       
       if (!rescheduleState.preConfirmed) {
-        const oldDateTime = formatFriendly(rescheduleState.originalAppointment.date, rescheduleState.originalAppointment.time);
+        // Format original event time from Google Calendar startDateTime
+        let oldDateTime = "unknown time";
+        if (rescheduleState.originalEvent.startDateTime) {
+          const startDate = new Date(rescheduleState.originalEvent.startDateTime);
+          oldDateTime = startDate.toLocaleString("en-AU", {
+            dateStyle: "long",
+            timeStyle: "short",
+            timeZone: "Australia/Sydney"
+          });
+        }
+
         const newDateTime = formatFriendly(rescheduleState.newDate, rescheduleState.newTime);
-        
+
         rescheduleState.preConfirmed = true;
         sessionState.rescheduleState = rescheduleState;
-        
-        parsed.reply = `I'll move your **${rescheduleState.originalAppointment.service}** from **${oldDateTime}** to **${newDateTime}**. Confirm? (yes/no)`;
-        await saveSession(db, sessionId, sessionState);
+
+        parsed.reply = `I'll move your **${rescheduleState.originalEvent.title}** from **${oldDateTime}** to **${newDateTime}**. Confirm? (yes/no)`;
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
       
@@ -324,67 +485,57 @@ app.post("/chat", async (req, res) => {
         if (yn === "yes") {
           try {
             // Update Google Calendar event
-            if (rescheduleState.originalAppointment.google_event_id) {
+            if (rescheduleState.originalEvent.google_event_id) {
               const start = new Date(`${rescheduleState.newDate}T${rescheduleState.newTime}:00`);
-              const end = new Date(start.getTime() + (rescheduleState.originalAppointment.duration_minutes * 60000));
-              
+              const end = new Date(start.getTime() + (rescheduleState.originalEvent.duration_minutes || 60) * 60000);
+
               await updateCalendarEvent({
-                eventId: rescheduleState.originalAppointment.google_event_id,
-                summary: `${rescheduleState.originalAppointment.service} - ${sessionState.email}`,
+                eventId: rescheduleState.originalEvent.google_event_id,
+                summary: rescheduleState.originalEvent.title,
                 startDateTime: start.toISOString(),
                 endDateTime: end.toISOString()
               });
             }
-            
-            // Update database
-            await db.run("UPDATE appointments SET date = ?, time = ?, status = ? WHERE id = ?", [
-              rescheduleState.newDate, 
-              rescheduleState.newTime, 
-              "Rescheduled", 
-              rescheduleState.originalAppointment.id
-            ]);
 
-            // Update session state
-            sessionState.activeBookings = sessionState.activeBookings.map((b) => {
-              if (b.db_id === rescheduleState.originalAppointment.id) {
-                return { ...b, date: rescheduleState.newDate, time: rescheduleState.newTime };
+            // Update session state events
+            sessionState.activeEvents = sessionState.activeEvents.map((event) => {
+              if (event.google_event_id === rescheduleState.originalEvent.google_event_id) {
+                return { ...event, date: rescheduleState.newDate, time: rescheduleState.newTime };
               }
-              return b;
+              return event;
             });
 
-            if (sessionState.lastAppointment && sessionState.lastAppointment.db_id === rescheduleState.originalAppointment.id) {
-              sessionState.lastAppointment.date = rescheduleState.newDate;
-              sessionState.lastAppointment.time = rescheduleState.newTime;
+            // Update lastEvent if it matches
+            if (sessionState.lastEvent && sessionState.lastEvent.google_event_id === rescheduleState.originalEvent.google_event_id) {
+              sessionState.lastEvent.date = rescheduleState.newDate;
+              sessionState.lastEvent.time = rescheduleState.newTime;
             }
 
             sessionState.rescheduleState = null;
 
-            const friendlyOld = formatFriendly(rescheduleState.originalAppointment.date, rescheduleState.originalAppointment.time);
-            const friendlyNew = formatFriendly(rescheduleState.newDate, rescheduleState.newTime);
-            let replyMsg = `Your ${rescheduleState.originalAppointment.service} has been moved from ${friendlyOld} to ${friendlyNew}.`;
-            
-            // Send reschedule email
-            try {
-              await sendGmailEmail({
-                to: sessionState.email,
-                subject: `Appointment Rescheduled: ${rescheduleState.originalAppointment.service}`,
-                body: `Your ${rescheduleState.originalAppointment.service} appointment has been moved from ${friendlyOld} to ${friendlyNew}.`
+            // Format original time from Google Calendar startDateTime
+            let friendlyOld = "unknown time";
+            if (rescheduleState.originalEvent.startDateTime) {
+              const startDate = new Date(rescheduleState.originalEvent.startDateTime);
+              friendlyOld = startDate.toLocaleString("en-AU", {
+                dateStyle: "long",
+                timeStyle: "short",
+                timeZone: "Australia/Sydney"
               });
-              replyMsg += " A confirmation email has been sent.";
-            } catch (emailErr) {
-              console.error("Reschedule email failed:", emailErr);
-              replyMsg += " (Note: Couldn't send confirmation email)";
             }
 
-            await saveSession(db, sessionId, sessionState);
+            const friendlyNew = formatFriendly(rescheduleState.newDate, rescheduleState.newTime);
+            let replyMsg = `Your "${rescheduleState.originalEvent.title}" has been moved from ${friendlyOld} to ${friendlyNew}.`;
+
+            saveSession(sessionId, sessionState);
             return res.json({ reply: replyMsg, state: sessionState, sessionId });
-            
+
           } catch (calendarError) {
             console.error("Calendar reschedule failed:", calendarError);
             rescheduleState.preConfirmed = false;
             sessionState.rescheduleState = rescheduleState;
-            
-            await saveSession(db, sessionId, sessionState);
+
+            saveSession(sessionId, sessionState);
             return res.json({ reply: `Unable to reschedule in calendar: ${calendarError.message}`, state: sessionState, sessionId });
           }
           
@@ -395,11 +546,11 @@ app.post("/chat", async (req, res) => {
           sessionState.rescheduleState = rescheduleState;
           
           parsed.reply = "No problem - what's the new date and time you'd prefer?";
-          await saveSession(db, sessionId, sessionState);
+          saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         } else {
           parsed.reply = "Please reply 'yes' to confirm the reschedule or 'no' to choose a different time.";
-          await saveSession(db, sessionId, sessionState);
+          saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         }
       }
@@ -414,11 +565,11 @@ app.post("/chat", async (req, res) => {
         // For now, we'll provide a simple response
         parsed.reply = `To check your schedule for ${qDate}, please visit your Google Calendar directly. I'll focus on helping you create, modify, and manage individual events through our conversation.`;
 
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       } catch (error) {
         parsed.reply = "Unable to check your schedule right now. Please try again.";
-        await saveSession(db, sessionId, sessionState);
+        saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
     }
@@ -426,7 +577,7 @@ app.post("/chat", async (req, res) => {
     // Default response
     else {
       const reply = parsed.reply || "How can I help you today? I can help you create calendar events, send emails, and manage your schedule.";
-      await saveSession(db, sessionId, sessionState);
+      saveSession(sessionId, sessionState);
       return res.json({ reply, state: sessionState, sessionId });
     }
 
@@ -470,8 +621,7 @@ app.get("/oauth2callback", async (req, res) => {
 // Reset sessions (development)
 app.post("/reset-all-sessions", async (req, res) => {
   try {
-    const db = await getDB();
-    await db.run("DELETE FROM sessions");
+    sessions.clear();
     return res.json({ reply: "All sessions cleared!" });
   } catch (err) {
     console.error("Reset sessions error:", err);
@@ -479,9 +629,61 @@ app.post("/reset-all-sessions", async (req, res) => {
   }
 });
 
+// Simple upcoming events endpoint for sidebar
+app.get("/api/upcoming-events", async (req, res) => {
+  try {
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    const now = new Date();
+    const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const response = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: now.toISOString(),
+      timeMax: endOfWeek.toISOString(),
+      maxResults: 5,
+      singleEvents: true,
+      orderBy: "startTime"
+    });
+
+    const events = response.data.items.map(event => {
+      const startTime = new Date(event.start.dateTime || event.start.date);
+      const endTime = new Date(event.end.dateTime || event.end.date);
+
+      const formatTime = (date) => {
+        return date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+      };
+
+      const formatDate = (date) => {
+        return date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        });
+      };
+
+      return {
+        id: event.id,
+        title: event.summary || 'Untitled Event',
+        time: `${formatTime(startTime)} - ${formatTime(endTime)}`,
+        date: formatDate(startTime)
+      };
+    });
+
+    res.json(events);
+  } catch (error) {
+    console.error("Error fetching events:", error);
+    res.status(500).json({ error: "Failed to fetch events" });
+  }
+});
+
 // Health check
 app.get("/", (req, res) => {
-  res.send("AI Productivity Agent Server is running!");
+  res.send("BuddyBoi Server is running!");
 });
 
 // Start server
