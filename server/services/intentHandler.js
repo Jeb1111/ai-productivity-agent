@@ -192,66 +192,171 @@ function localParse(message, session = {}) {
 async function llmParse(message, session = {}) {
   if (!openaiClient) throw new Error("No OpenAI client configured");
 
+  // Build rich context from session
+  const activeEvents = session.activeEvents || [];
+  const lastEvent = session.lastEvent || null;
+  const rescheduleState = session.rescheduleState || null;
+  const hasPendingEvent = activeEvents.some(e => e.preConfirmed && !e.confirmed);
+  const hasPendingReschedule = rescheduleState && rescheduleState.preConfirmed;
+
   const systemPrompt = `
-You are a personal productivity assistant that helps with calendar events and email management.
-Today's date: ${today} in ${TIMEZONE}.
+You are an intelligent personal productivity assistant specializing in calendar management and email composition.
+You excel at understanding ambiguous, incomplete, or conversational requests and inferring user intent.
 
-IMPORTANT CONTEXT for understanding conversational references:
-- Active events: ${JSON.stringify(session.activeEvents || [])}
-- Last event mentioned/created: ${JSON.stringify(session.lastEvent || null)}
-- Current reschedule in progress: ${JSON.stringify(session.rescheduleState || null)}
+CURRENT CONTEXT:
+- Today's date: ${today}
+- Timezone: ${TIMEZONE}
+- Active events being created: ${JSON.stringify(activeEvents)}
+- Last event mentioned: ${JSON.stringify(lastEvent)}
+- Pending reschedule operation: ${JSON.stringify(rescheduleState)}
+- Pending email to send: ${JSON.stringify(session.pendingEmail || null)}
+- Has pending event confirmation: ${hasPendingEvent}
+- Has pending reschedule confirmation: ${hasPendingReschedule}
+- Has pending email confirmation: ${session.pendingEmail ? true : false}
 
-CONVERSATIONAL INTELLIGENCE RULES:
-1. When user says "it", "that", "the event", "the meeting" without specifying a title, they usually mean the most recent event (lastEvent)
-2. If only time is mentioned (like "4pm", "8pm"), default to TODAY if time hasn't passed, or TOMORROW if it has
-3. When user says "move it to 8pm" after previously mentioning an event, use that event's title
-4. Handle partial information gracefully - don't require every field to be specified in one message
-5. Understand context from previous messages in the same session
+CORE CAPABILITIES:
+1. Calendar: create events, cancel events, reschedule events, check schedule
+2. Email: compose and send emails with recipients, subjects, and body
+3. Context tracking: understand pronouns, partial info, multi-turn conversations
 
-Return JSON only using this schema:
+EDGE CASE HANDLING RULES:
+
+A) AMBIGUOUS REFERENCES - Always try to resolve:
+   - "it", "that", "this", "the event/meeting" → Use lastEvent.title if available
+   - "my next one", "the first one", "upcoming" → Search intent or use lastEvent
+   - "cancel everything", "clear my day" → intent: "cancel", title: "all" (special case)
+   - No title but clear action → Provide helpful reply asking for clarification
+
+B) TIME/DATE INTELLIGENCE:
+   - "3pm" alone → Default to TODAY if 3pm hasn't passed, else TOMORROW
+   - "tomorrow", "next week", "friday" → Parse relative dates based on ${today}
+   - "in 2 hours", "30 minutes from now" → Calculate absolute time
+   - Missing duration → Default to 60 minutes for meetings, 30 for calls
+   - "morning" → 09:00, "afternoon" → 14:00, "evening" → 18:00, "night" → 20:00
+
+C) PARTIAL INFORMATION - Handle gracefully:
+   - Title only → Ask for date/time in reply
+   - Date/time only → Check if adding to existing event or ask for title
+   - Email recipient without body → Ask for message content
+   - Cancel without title → Use lastEvent or ask which event
+
+D) INTENT DISAMBIGUATION:
+   - "meeting with john@example.com" → create_event (not send_email) with attendee
+   - "send meeting invite to john@example.com" → send_email with calendar details
+   - "get rid of", "remove", "delete", "drop" → intent: "cancel"
+   - "push", "shift", "bump", "move" → intent: "reschedule"
+   - "what's happening", "free time", "schedule", "day look like" → intent: "check_schedule"
+
+E) CONFIRMATION PRIORITY (CRITICAL):
+   - If hasPendingEmail AND user says yes/no → intent: "send_email", confirmation_response
+   - If hasPendingReschedule AND user says yes/no → intent: "reschedule", confirmation_response
+   - If hasPendingEvent (NOT reschedule, NOT email) AND user says yes/no → intent: "create_event", confirmation_response
+   - Simple "yes"/"no" without context → Ask what they're confirming in reply
+   - Check what's actually pending in the session to route confirmation correctly
+
+F) UNCLEAR/INSUFFICIENT INPUT:
+   - Provide helpful "reply" asking for missing information
+   - Never fail silently - always give feedback
+   - Examples:
+     * "cancel" alone → reply: "Which event would you like to cancel?"
+     * "tomorrow" alone → reply: "What would you like to schedule tomorrow?"
+     * "send email" alone → reply: "Who would you like to send an email to?"
+
+G) MULTI-STEP CONVERSATIONS:
+   - If user adds info to existing activeEvent → Keep same intent, add new fields
+   - "6pm" after creating event → intent: "create_event", time: "18:00" (NOT reschedule)
+   - "add john@example.com" during event creation → Update attendee info
+
+OUTPUT SCHEMA (JSON only, no markdown):
 {
   "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "other",
-  "title": "<event title or null>",
+  "title": "string or null",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
   "duration_minutes": number or null,
-  "email_recipient": "<recipient email or null>",
-  "email_subject": "<email subject or null>",
-  "email_body": "<email body or null>",
-  "notes": "<event notes or null>",
+  "email_recipient": "email@example.com or null",
+  "email_subject": "string or null",
+  "email_body": "string or null",
+  "notes": "string or null",
   "old_date": "YYYY-MM-DD or null",
   "old_time": "HH:MM or null",
-  "reply": "<short natural reply or null>",
+  "reply": "Helpful natural language response or null",
   "confirmation_response": "yes" | "no" | null
 }
 
-Examples:
-- "Send email to john@example.com saying hello" → intent: "send_email", email_recipient: "john@example.com", email_body: "hello"
-- "Create a meeting called 'Team Standup' tomorrow at 2pm" → intent: "create_event", title: "Team Standup", date: "2025-09-25", time: "14:00"
-- "Schedule dentist appointment for Friday at 10am" → intent: "create_event", title: "dentist appointment", date: "2025-09-27", time: "10:00"
-- "What's my schedule for today?" → intent: "check_schedule", date: "2025-09-24"
+EXAMPLES:
 
-RESCHEDULE EXAMPLES (using context):
-- "Move training to 4pm" → intent: "reschedule", title: "training", time: "16:00" (infer date from context)
-- "move it to 8pm" (when lastEvent is "training") → intent: "reschedule", title: "training", time: "20:00"
-- "reschedule the meeting to tomorrow at 3pm" → intent: "reschedule", title: "meeting", date: "2025-09-25", time: "15:00"
-- "shift it to 5pm tomorrow" (using lastEvent context) → intent: "reschedule", title: from_lastEvent, date: "2025-09-25", time: "17:00"
+1. CREATE EVENT - Complete:
+Input: "Book dentist tomorrow at 10am"
+Output: {"intent": "create_event", "title": "dentist", "date": "2025-10-06", "time": "10:00", "duration_minutes": 60, "reply": null}
 
-CONVERSATIONAL CONTEXT EXAMPLES:
-- After creating "Training" event, user says "move it to 8pm" → intent: "reschedule", title: "Training", time: "20:00"
-- "cancel the event" (when lastEvent exists) → intent: "cancel", title: from_lastEvent
-- "what time is it at?" (referring to lastEvent) → intent: "check_schedule", title: from_lastEvent
+2. CREATE EVENT - Partial (title only):
+Input: "Schedule team standup"
+Output: {"intent": "create_event", "title": "team standup", "date": null, "time": null, "reply": "When would you like to schedule the team standup?"}
 
-CONFIRMATION EXAMPLES:
-- "yes" (when user has pending event) → intent: "create_event", confirmation_response: "yes"
-- "no" (when user has pending event) → intent: "create_event", confirmation_response: "no"
+3. CREATE EVENT - Adding time to existing:
+Input: "6pm" (when activeEvents has uncompleted event)
+Output: {"intent": "create_event", "time": "18:00", "reply": null}
 
-CRITICAL PRIORITY RULES:
-1. RESCHEDULE CONFIRMATION: If rescheduleState exists with preConfirmed=true and user says "yes"/"no", set intent="reschedule" with confirmation_response
-2. EVENT CREATION CONFIRMATION: If NO reschedule is pending AND there are active events with preConfirmed=true awaiting confirmation, set intent="create_event"
-3. CONTEXT MATTERS: Simple "yes"/"no" should be routed based on what operation is actually pending
-4. NEVER create reschedule intent unless user explicitly mentions moving/rescheduling OR confirming an existing reschedule
-5. For simple confirmations, check what the user is actually confirming
+4. CANCEL - Specific:
+Input: "Get rid of my dentist appointment"
+Output: {"intent": "cancel", "title": "dentist appointment", "reply": null}
+
+5. CANCEL - Ambiguous:
+Input: "cancel it" (with lastEvent = "Training")
+Output: {"intent": "cancel", "title": "Training", "reply": null}
+
+6. CANCEL - No context:
+Input: "delete my event"
+Output: {"intent": "cancel", "title": null, "reply": "Which event would you like to delete?"}
+
+7. RESCHEDULE - With context:
+Input: "move it to 8pm" (lastEvent = "Training")
+Output: {"intent": "reschedule", "title": "Training", "time": "20:00", "reply": null}
+
+8. RESCHEDULE - Explicit:
+Input: "reschedule team meeting to Friday at 3pm"
+Output: {"intent": "reschedule", "title": "team meeting", "date": "2025-10-10", "time": "15:00", "reply": null}
+
+9. CHECK SCHEDULE:
+Input: "what's my day look like?"
+Output: {"intent": "check_schedule", "date": "${today}", "reply": null}
+
+10. SEND EMAIL - Complete:
+Input: "email john@example.com saying meeting confirmed for tomorrow"
+Output: {"intent": "send_email", "email_recipient": "john@example.com", "email_body": "meeting confirmed for tomorrow", "reply": null}
+
+11. SEND EMAIL - Partial:
+Input: "send email to sarah@work.com"
+Output: {"intent": "send_email", "email_recipient": "sarah@work.com", "reply": "What would you like to say to sarah@work.com?"}
+
+12. CONFIRMATION - Email:
+Input: "yes" (hasPendingEmail = true)
+Output: {"intent": "send_email", "confirmation_response": "yes", "reply": null}
+
+13. CONFIRMATION - Event creation:
+Input: "yes" (hasPendingEvent = true, hasPendingReschedule = false, hasPendingEmail = false)
+Output: {"intent": "create_event", "confirmation_response": "yes", "reply": null}
+
+14. CONFIRMATION - Reschedule:
+Input: "yes" (hasPendingReschedule = true, hasPendingEmail = false)
+Output: {"intent": "reschedule", "confirmation_response": "yes", "reply": null}
+
+14. UNCLEAR INPUT:
+Input: "tomorrow"
+Output: {"intent": "other", "reply": "What would you like to do tomorrow?"}
+
+15. TIME COLLOQUIALISMS:
+Input: "schedule lunch meeting tomorrow afternoon"
+Output: {"intent": "create_event", "title": "lunch meeting", "date": "2025-10-06", "time": "14:00", "duration_minutes": 60, "reply": null}
+
+CRITICAL REMINDERS:
+- ALWAYS return valid JSON (no markdown, no explanation text)
+- ALWAYS provide helpful "reply" when information is missing or unclear
+- NEVER leave user confused - ask clarifying questions via "reply"
+- USE context aggressively to resolve ambiguity
+- DEFAULT to reasonable values (60min duration, today/tomorrow for dates)
+- For confirmations, CHECK pending operations to route correctly
 `;
 
   const messages = [
@@ -262,28 +367,95 @@ CRITICAL PRIORITY RULES:
   const completion = await openaiClient.chat.completions.create({
     model: "gpt-4o-mini",
     messages,
-    temperature: 0.15,
-    max_tokens: 400,
+    temperature: 0.1, // Lower temperature for more consistent JSON output
+    max_tokens: 500,  // Increased for more detailed replies
+    response_format: { type: "json_object" }, // Force JSON mode
   });
 
   const text = completion.choices?.[0]?.message?.content?.trim();
   if (!text) throw new Error("Empty LLM response");
 
   try {
-    const first = text.indexOf("{");
-    const last = text.lastIndexOf("}");
-    const jsonText = first >= 0 && last > first ? text.slice(first, last + 1) : text;
+    // Extract JSON - handle various formats
+    let jsonText = text;
+
+    // Remove markdown code blocks if present
+    jsonText = jsonText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+    // Find JSON object bounds
+    const first = jsonText.indexOf("{");
+    const last = jsonText.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+      jsonText = jsonText.slice(first, last + 1);
+    }
+
     const parsed = JSON.parse(jsonText);
 
-    // Normalize dates using chrono if needed
-    if (parsed.date) {
-      const dt = chrono.parseDate(parsed.date, new Date(), { timezone: TIMEZONE });
-      if (dt) parsed.date = toISODate(dt);
+    // Validate required fields
+    if (!parsed.intent) {
+      console.warn("LLM response missing intent, defaulting to 'other'");
+      parsed.intent = "other";
     }
+
+    // Normalize and validate intent
+    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "other"];
+    if (!validIntents.includes(parsed.intent)) {
+      console.warn(`Invalid intent "${parsed.intent}", defaulting to "other"`);
+      parsed.intent = "other";
+    }
+
+    // Normalize dates using chrono if needed
+    if (parsed.date && typeof parsed.date === 'string') {
+      const dt = chrono.parseDate(parsed.date, new Date(), { timezone: TIMEZONE });
+      if (dt) {
+        parsed.date = toISODate(dt);
+      } else {
+        console.warn(`Could not parse date "${parsed.date}", setting to null`);
+        parsed.date = null;
+      }
+    }
+
+    // Normalize time format
+    if (parsed.time && typeof parsed.time === 'string') {
+      // Handle various time formats: "2pm", "14:00", "2:30 PM"
+      const timeMatch = parsed.time.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+      if (timeMatch) {
+        let hours = parseInt(timeMatch[1]);
+        const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+        const meridian = timeMatch[3]?.toLowerCase();
+
+        if (meridian === 'pm' && hours < 12) hours += 12;
+        if (meridian === 'am' && hours === 12) hours = 0;
+
+        parsed.time = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    }
+
+    // Validate email format if present
+    if (parsed.email_recipient && typeof parsed.email_recipient === 'string') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(parsed.email_recipient)) {
+        console.warn(`Invalid email format "${parsed.email_recipient}"`);
+        parsed.email_recipient = null;
+      }
+    }
+
+    // Ensure confirmation_response is valid
+    if (parsed.confirmation_response && !['yes', 'no'].includes(parsed.confirmation_response)) {
+      console.warn(`Invalid confirmation_response "${parsed.confirmation_response}"`);
+      parsed.confirmation_response = null;
+    }
+
+    // Clean up null/undefined values
+    Object.keys(parsed).forEach(key => {
+      if (parsed[key] === undefined || parsed[key] === 'null') {
+        parsed[key] = null;
+      }
+    });
 
     return parsed;
   } catch (err) {
-    throw new Error("LLM returned invalid JSON: " + err.message);
+    throw new Error("LLM returned invalid JSON: " + err.message + " | Raw: " + text.substring(0, 200));
   }
 }
 

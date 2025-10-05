@@ -129,3 +129,55 @@ export async function searchCalendarEvents(titleQuery = null, maxResults = 50) {
     throw new Error(`Failed to search calendar events: ${error.message}`);
   }
 }
+
+export async function getEventsForDateRange(startDate, endDate = null) {
+  try {
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    // If no end date provided, use end of start date
+    const timeMin = new Date(startDate);
+    timeMin.setHours(0, 0, 0, 0);
+
+    const timeMax = endDate ? new Date(endDate) : new Date(startDate);
+    timeMax.setHours(23, 59, 59, 999);
+
+    const params = {
+      calendarId: "primary",
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime"
+    };
+
+    const response = await calendar.events.list(params);
+    const events = response.data.items || [];
+
+    return events.map(event => {
+      const startDateTime = event.start?.dateTime || event.start?.date;
+      const endDateTime = event.end?.dateTime || event.end?.date;
+
+      // Calculate duration in minutes
+      let duration_minutes = 60; // Default duration
+      if (startDateTime && endDateTime) {
+        const start = new Date(startDateTime);
+        const end = new Date(endDateTime);
+        duration_minutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60));
+      }
+
+      return {
+        eventId: event.id,
+        summary: event.summary || 'No title',
+        startDateTime: startDateTime,
+        endDateTime: endDateTime,
+        duration_minutes: duration_minutes,
+        description: event.description || null,
+        location: event.location || null
+      };
+    });
+
+  } catch (error) {
+    console.error("Calendar get events error:", error);
+    throw new Error(`Failed to get calendar events: ${error.message}`);
+  }
+}

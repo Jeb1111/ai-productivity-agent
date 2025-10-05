@@ -8,7 +8,7 @@ import { intentHandler } from "./services/intentHandler.js";
 // Database removed - using in-memory session storage
 import { v4 as uuidv4 } from "uuid";
 import { sendGmailEmail, draftGmailEmail } from "./services/gmailService.js";
-import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, searchCalendarEvents } from "./services/calendarService.js";
+import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, searchCalendarEvents, getEventsForDateRange } from "./services/calendarService.js";
 import path from "path";
 
 dotenv.config();
@@ -85,6 +85,29 @@ app.post("/chat", async (req, res) => {
     // Parse intent and fields
     const parsed = await intentHandler(message, sessionState);
 
+    // OVERRIDE: Handle simple yes/no for pending operations (LLM sometimes misses this)
+    const messageLower = message.trim().toLowerCase();
+    const isSimpleYesNo = ['yes', 'y', 'no', 'n', 'yeah', 'yep', 'nope', 'nah'].includes(messageLower);
+    const hasPendingReschedule = sessionState.rescheduleState && sessionState.rescheduleState.preConfirmed;
+    const hasPendingEventConfirmation = sessionState.activeEvents &&
+                                         sessionState.activeEvents.some(e => e.preConfirmed && !e.confirmed);
+
+    if (isSimpleYesNo && !parsed.confirmation_response) {
+      const confirmResponse = ['yes', 'y', 'yeah', 'yep'].includes(messageLower) ? 'yes' : 'no';
+
+      // Priority: email > reschedule > event creation
+      if (sessionState.pendingEmail) {
+        parsed.intent = "send_email";
+        parsed.confirmation_response = confirmResponse;
+      } else if (hasPendingReschedule) {
+        parsed.intent = "reschedule";
+        parsed.confirmation_response = confirmResponse;
+      } else if (hasPendingEventConfirmation) {
+        parsed.intent = "create_event";
+        parsed.confirmation_response = confirmResponse;
+      }
+    }
+
     // If there's an active event creation and the message looks like just time/date info
     // Override any reschedule intent to create_event instead
     if (hasActiveEventCreation && (parsed.time || parsed.date) &&
@@ -99,6 +122,45 @@ app.post("/chat", async (req, res) => {
 
     // Handle email sending intent
     if (parsed.intent === "send_email") {
+      // Initialize pendingEmail in session if it doesn't exist
+      if (!sessionState.pendingEmail) {
+        sessionState.pendingEmail = null;
+      }
+
+      // Handle confirmation response
+      if (parsed.confirmation_response && sessionState.pendingEmail) {
+        if (parsed.confirmation_response === "yes") {
+          try {
+            // Send the confirmed email
+            const emailResult = await sendGmailEmail({
+              to: sessionState.pendingEmail.recipient,
+              subject: sessionState.pendingEmail.subject,
+              body: sessionState.pendingEmail.body
+            });
+
+            parsed.reply = `Email sent to ${sessionState.pendingEmail.recipient} successfully!`;
+            sessionState.pendingEmail = null; // Clear pending email
+            saveSession(sessionId, sessionState);
+            return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+
+          } catch (emailError) {
+            console.error("Email send failed:", emailError);
+            parsed.reply = `Failed to send email to ${sessionState.pendingEmail.recipient}. Please try again or check your Gmail authorization.`;
+            sessionState.pendingEmail = null;
+            saveSession(sessionId, sessionState);
+            return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+          }
+        } else {
+          // User said no - cancel email
+          const recipient = sessionState.pendingEmail.recipient;
+          parsed.reply = `Got it! I won't send the email to ${recipient}. Is there anything else I can help you with?`;
+          sessionState.pendingEmail = null;
+          saveSession(sessionId, sessionState);
+          return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+        }
+      }
+
+      // Collect email details
       if (!parsed.email_recipient) {
         parsed.reply = "Who would you like to send the email to? Please provide their email address.";
         saveSession(sessionId, sessionState);
@@ -111,26 +173,24 @@ app.post("/chat", async (req, res) => {
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
-      try {
-        // Send email via Gmail API
-        const emailResult = await sendGmailEmail({
-          to: parsed.email_recipient,
-          subject: parsed.email_subject || "Message from AI Assistant",
-          body: parsed.email_body || "Hello!"
-        });
+      // Store pending email and ask for confirmation
+      const subject = parsed.email_subject || "Message from AI Assistant";
+      const body = parsed.email_body || "Hello!";
 
-        // Email logged in Gmail's Sent folder automatically
+      sessionState.pendingEmail = {
+        recipient: parsed.email_recipient,
+        subject: subject,
+        body: body
+      };
 
-        parsed.reply = `Email sent to ${parsed.email_recipient} successfully!`;
-        saveSession(sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+      let confirmMsg = `I'll send an email to **${parsed.email_recipient}**\n\n`;
+      confirmMsg += `**Subject:** ${subject}\n`;
+      confirmMsg += `**Message:**\n${body}\n\n`;
+      confirmMsg += `Would you like to send this email? (yes/no)`;
 
-      } catch (emailError) {
-        console.error("Email send failed:", emailError);
-        parsed.reply = `Failed to send email to ${parsed.email_recipient}. Please try again or check your Gmail authorization.`;
-        saveSession(sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-      }
+      parsed.reply = confirmMsg;
+      saveSession(sessionId, sessionState);
+      return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
 
     // Handle create event intent
@@ -245,9 +305,10 @@ app.post("/chat", async (req, res) => {
           }
 
         } else if (yn === "no") {
-          currentEvent.preConfirmed = false;
-          updateEventInSession(sessionState, currentEvent);
-          parsed.reply = "No problem - what would you like to change? (title / date / time / notes)";
+          // User doesn't want to create this event - cancel it
+          const eventTitle = currentEvent.title;
+          sessionState.activeEvents = sessionState.activeEvents.filter(e => e.id !== currentEvent.id);
+          parsed.reply = `No worries! I won't create the "${eventTitle}" event. Is there anything else I can help you with?`;
           saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         } else {
@@ -579,12 +640,11 @@ app.post("/chat", async (req, res) => {
           }
           
         } else if (yn === "no") {
-          rescheduleState.preConfirmed = false;
-          rescheduleState.newDate = null;
-          rescheduleState.newTime = null;
-          sessionState.rescheduleState = rescheduleState;
-          
-          parsed.reply = "No problem - what's the new date and time you'd prefer?";
+          // User doesn't want to reschedule - cancel the operation
+          const eventTitle = rescheduleState.eventTitle;
+          sessionState.rescheduleState = null;
+
+          parsed.reply = `Got it! I won't reschedule "${eventTitle}". It will stay at its original time. Anything else I can help with?`;
           saveSession(sessionId, sessionState);
           return res.json({ reply: parsed.reply, state: sessionState, sessionId });
         } else {
@@ -600,13 +660,52 @@ app.post("/chat", async (req, res) => {
       const qDate = parsed.date || new Date().toISOString().split('T')[0]; // default to today
 
       try {
-        // This would ideally fetch from Google Calendar API
-        // For now, we'll provide a simple response
-        parsed.reply = `To check your schedule for ${qDate}, please visit your Google Calendar directly. I'll focus on helping you create, modify, and manage individual events through our conversation.`;
+        const events = await getEventsForDateRange(qDate);
+
+        if (!events || events.length === 0) {
+          const dateStr = new Date(qDate).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+          parsed.reply = `You have no events scheduled for ${dateStr}. Your day is free!`;
+        } else {
+          const dateStr = new Date(qDate).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          let scheduleText = `**Your schedule for ${dateStr}:**\n\n`;
+
+          events.forEach((event, index) => {
+            const startTime = new Date(event.startDateTime);
+            const endTime = new Date(event.endDateTime);
+            const timeStr = `${startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+
+            scheduleText += `**${index + 1}. ${event.summary}**\n`;
+            scheduleText += `⏰ ${timeStr}\n`;
+
+            if (event.location) {
+              scheduleText += `📍 ${event.location}\n`;
+            }
+
+            if (event.description) {
+              scheduleText += `📝 ${event.description}\n`;
+            }
+
+            scheduleText += '\n';
+          });
+
+          parsed.reply = scheduleText.trim();
+        }
 
         saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       } catch (error) {
+        console.error("Check schedule error:", error);
         parsed.reply = "Unable to check your schedule right now. Please try again.";
         saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });

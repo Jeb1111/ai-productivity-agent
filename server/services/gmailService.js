@@ -6,15 +6,19 @@ export async function sendGmailEmail({ to, subject, body, from = null }) {
     const auth = getAuthClient();
     const gmail = google.gmail({ version: "v1", auth });
 
-    // Create email message
-    const messageParts = [
-      from ? `From: ${from}` : '',
-      `To: ${to}`,
-      `Subject: ${subject}`,
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      body
-    ].filter(part => part !== '').join('\n');
+    // Create RFC 2822 compliant email message
+    const headers = [];
+    if (from) {
+      headers.push(`From: ${from}`);
+    }
+    headers.push(`To: ${to}`);
+    headers.push(`Subject: ${subject}`);
+    headers.push('MIME-Version: 1.0');
+    headers.push('Content-Type: text/plain; charset="UTF-8"');
+    headers.push('Content-Transfer-Encoding: 7bit');
+
+    // Join headers and add double CRLF before body (RFC 2822 requirement)
+    const messageParts = headers.join('\r\n') + '\r\n\r\n' + body;
 
     // Encode message in base64
     const encodedMessage = Buffer.from(messageParts)
@@ -33,7 +37,7 @@ export async function sendGmailEmail({ to, subject, body, from = null }) {
 
     console.log(`Email sent to ${to}:`, response.data.id);
     return { success: true, messageId: response.data.id };
-    
+
   } catch (error) {
     console.error("Gmail API error:", error);
     throw new Error(`Failed to send email: ${error.message}`);
@@ -45,13 +49,17 @@ export async function draftGmailEmail({ to, subject, body }) {
     const auth = getAuthClient();
     const gmail = google.gmail({ version: "v1", auth });
 
-    const messageParts = [
+    // Create RFC 2822 compliant email message
+    const headers = [
       `To: ${to}`,
       `Subject: ${subject}`,
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      body
-    ].join('\n');
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 7bit'
+    ];
+
+    // Join headers and add double CRLF before body (RFC 2822 requirement)
+    const messageParts = headers.join('\r\n') + '\r\n\r\n' + body;
 
     const encodedMessage = Buffer.from(messageParts)
       .toString('base64')
@@ -70,7 +78,7 @@ export async function draftGmailEmail({ to, subject, body }) {
 
     console.log(`Draft created for ${to}:`, response.data.id);
     return { success: true, draftId: response.data.id };
-    
+
   } catch (error) {
     console.error("Gmail draft error:", error);
     throw new Error(`Failed to create draft: ${error.message}`);
