@@ -173,6 +173,36 @@
       border-color: #777;
     }
 
+    .goals-button {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: white;
+      border: none;
+      color: #333;
+      padding: 10px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+    }
+
+    .goals-button:hover {
+      background: #f0f0f0;
+      transform: translateY(-50%) scale(1.05);
+      box-shadow: 0 6px 16px rgba(255, 255, 255, 0.3);
+    }
+
+    .goals-button:active {
+      transform: translateY(-50%) scale(0.98);
+    }
+
     .chat-area {
       flex: 1;
       overflow-y: auto;
@@ -581,6 +611,89 @@
       justify-content: center;
     }
 
+    /* Goals Modal Specific Styles */
+    .goals-modal-content {
+      background: #1a1a1a;
+      border: 1px solid #555;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 700px;
+      height: 85vh;
+      max-height: 700px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: slideUp 0.3s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .goals-chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #0d0d0d;
+    }
+
+    .goals-welcome {
+      text-align: center;
+      margin: 40px 20px;
+      color: white;
+    }
+
+    .goals-welcome h3 {
+      font-size: 22px;
+      margin-bottom: 15px;
+      color: white;
+    }
+
+    .goals-welcome p {
+      color: #999;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
+
+    .goals-examples {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 20px;
+      align-items: center;
+    }
+
+    .goals-example {
+      background: #262626;
+      border: 1px solid #444;
+      border-radius: 12px;
+      padding: 10px 16px;
+      font-size: 13px;
+      color: #ccc;
+      max-width: 400px;
+      text-align: left;
+    }
+
+    .goals-input-area {
+      background: #262626;
+      padding: 20px;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .goals-loading {
+      display: none;
+      color: #999;
+      font-style: italic;
+      font-size: 13px;
+      padding: 8px 16px;
+      margin: 0 20px 10px 20px;
+      text-align: center;
+    }
+
+    .goals-loading.show {
+      display: block;
+    }
+
     @media (max-width: 600px) {
       .chat-container {
         height: 100vh;
@@ -614,6 +727,21 @@
         margin-top: 10px;
         display: block;
       }
+
+      .goals-button {
+        position: static;
+        transform: none;
+        margin-top: 10px;
+        display: flex;
+        width: fit-content;
+      }
+
+      .goals-modal-content {
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+      }
     }
   </style>
 </head>
@@ -621,6 +749,12 @@
   <div class="chat-container">
     <div class="main-content">
       <div class="header">
+        <button class="goals-button" onclick="openGoalsModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+          </svg>
+          📋 Goals
+        </button>
         <h1>BuddyBoi</h1>
         <p>Your personal assistant for calendar management and emails</p>
         <a href="/auth" class="auth-button">Authorize Google</a>
@@ -809,6 +943,47 @@
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Goals Modal -->
+  <div id="goalsModal" class="modal">
+    <div class="goals-modal-content">
+      <div class="modal-header">
+        <h2>📋 My Goals</h2>
+        <button class="modal-close" onclick="closeGoalsModal()">&times;</button>
+      </div>
+
+      <div class="goals-chat-area" id="goalsChatArea">
+        <div class="goals-welcome" id="goalsWelcome">
+          <h3>Set and manage your goals</h3>
+          <p>Tell me what you'd like to achieve! I can help you track goals like:</p>
+          <div class="goals-examples">
+            <div class="goals-example">📚 "I want to study 10 hours before my exam on Friday"</div>
+            <div class="goals-example">💪 "Set a goal to workout 3 times per week"</div>
+            <div class="goals-example">😴 "I need to sleep 7 hours every night"</div>
+            <div class="goals-example">📝 "I want to finish my project by next Monday"</div>
+          </div>
+          <p style="margin-top: 20px; font-size: 13px;">Type your goal below to get started</p>
+        </div>
+      </div>
+
+      <div class="goals-loading" id="goalsLoading">Processing your goal...</div>
+
+      <div class="goals-input-area">
+        <input
+          type="text"
+          id="goalsMessageInput"
+          class="message-input"
+          placeholder="Describe your goal..."
+          maxlength="500"
+        />
+        <button id="goalsSendButton" class="send-button" onclick="sendGoalMessage()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
       </div>
     </div>
   </div>
@@ -1168,6 +1343,106 @@
       if (e.key === 'Escape') {
         closeEventModal();
         closeDeleteModal();
+        closeGoalsModal();
+      }
+    });
+
+    // ============ Goals Modal Functionality ============
+    const goalsChatArea = document.getElementById('goalsChatArea');
+    const goalsMessageInput = document.getElementById('goalsMessageInput');
+    const goalsSendButton = document.getElementById('goalsSendButton');
+    const goalsLoading = document.getElementById('goalsLoading');
+    const goalsWelcome = document.getElementById('goalsWelcome');
+
+    function openGoalsModal() {
+      document.getElementById('goalsModal').classList.add('show');
+      goalsMessageInput.focus();
+    }
+
+    function closeGoalsModal() {
+      document.getElementById('goalsModal').classList.remove('show');
+    }
+
+    function addGoalMessage(text, sender) {
+      // Remove welcome message on first interaction
+      if (goalsWelcome && goalsWelcome.parentNode) {
+        goalsWelcome.remove();
+      }
+
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${sender}`;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      contentDiv.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+
+      const timestampDiv = document.createElement('div');
+      timestampDiv.className = 'timestamp';
+      timestampDiv.textContent = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      contentDiv.appendChild(timestampDiv);
+      messageDiv.appendChild(contentDiv);
+      goalsChatArea.appendChild(messageDiv);
+
+      // Scroll to bottom
+      goalsChatArea.scrollTop = goalsChatArea.scrollHeight;
+    }
+
+    async function sendGoalMessage() {
+      const message = goalsMessageInput.value.trim();
+      if (!message) return;
+
+      // Disable input and show loading
+      goalsMessageInput.disabled = true;
+      goalsSendButton.disabled = true;
+      goalsLoading.classList.add('show');
+
+      // Add user message
+      addGoalMessage(message, 'user');
+      goalsMessageInput.value = '';
+
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: message,
+            sessionId: sessionId,
+            context: 'goal_management'  // NEW: Send context to indicate this is a goal request
+          })
+        });
+
+        const data = await response.json();
+        addGoalMessage(data.reply, 'bot');
+
+      } catch (error) {
+        console.error('Error:', error);
+        addGoalMessage('Sorry, I encountered an error. Please try again.', 'bot');
+      } finally {
+        // Re-enable input
+        goalsMessageInput.disabled = false;
+        goalsSendButton.disabled = false;
+        goalsLoading.classList.remove('show');
+        goalsMessageInput.focus();
+      }
+    }
+
+    // Enter key to send goal message
+    goalsMessageInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        sendGoalMessage();
+      }
+    });
+
+    // Close goals modal when clicking outside
+    document.getElementById('goalsModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeGoalsModal();
       }
     });
   </script>

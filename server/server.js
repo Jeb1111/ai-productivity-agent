@@ -71,7 +71,7 @@ function extractYesNo(msg) {
 
 // Main chat endpoint
 app.post("/chat", async (req, res) => {
-  let { message = "", sessionId } = req.body;
+  let { message = "", sessionId, context = null } = req.body;
   if (!sessionId) sessionId = uuidv4();
 
   try {
@@ -82,8 +82,8 @@ app.post("/chat", async (req, res) => {
     const hasActiveEventCreation = sessionState.activeEvents &&
                                     sessionState.activeEvents.some(e => !e.confirmed && !e.preConfirmed);
 
-    // Parse intent and fields
-    const parsed = await intentHandler(message, sessionState);
+    // Parse intent and fields with context
+    const parsed = await intentHandler(message, sessionState, context);
 
     // OVERRIDE: Handle simple yes/no for pending operations (LLM sometimes misses this)
     const messageLower = message.trim().toLowerCase();
@@ -105,6 +105,18 @@ app.post("/chat", async (req, res) => {
       } else if (hasPendingEventConfirmation) {
         parsed.intent = "create_event";
         parsed.confirmation_response = confirmResponse;
+      }
+    }
+
+    // GOAL CONTEXT OVERRIDE: If in goal_management context, bias toward goal intents
+    if (context === "goal_management") {
+      // If intent is "other" or ambiguous, default to set_goal
+      if (parsed.intent === "other" || parsed.intent === "create_event") {
+        parsed.intent = "set_goal";
+        // If goal_description wasn't extracted, use the full message
+        if (!parsed.goal_description) {
+          parsed.goal_description = message;
+        }
       }
     }
 
@@ -710,6 +722,19 @@ app.post("/chat", async (req, res) => {
         saveSession(sessionId, sessionState);
         return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
+    }
+
+    // Handle set_goal intent
+    else if (parsed.intent === "set_goal") {
+      // For Step 1.1, we just detect and respond - no storage yet
+      if (parsed.goal_description) {
+        parsed.reply = `I detected you want to set a goal: ${parsed.goal_description}`;
+      } else {
+        parsed.reply = "I detected you want to set a goal, but I need more details. What would you like to achieve?";
+      }
+
+      saveSession(sessionId, sessionState);
+      return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
 
     // Default response

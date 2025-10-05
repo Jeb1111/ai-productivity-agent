@@ -66,6 +66,7 @@ function localParse(message, session = {}) {
     old_time: null,
     reply: null,
     confirmation_response: null,
+    goal_description: null,
   };
 
   // Email recipient detection for send commands
@@ -75,6 +76,8 @@ function localParse(message, session = {}) {
   // Intent detection for personal productivity - enhanced delete/cancel recognition
   if (/\b(send email|email|compose|draft)\b/.test(lower)) {
     res.intent = "send_email";
+  } else if (/\b(set|create|add)\s+(?:a\s+)?goal\b/.test(lower)) {
+    res.intent = "set_goal";
   } else if (/\b(cancel|delete|remove|clear|erase|drop|eliminate|destroy)\b/.test(lower)) {
     res.intent = "cancel";
   } else if (/\b(resched|reschedule|move|change|shift)\b/.test(lower)) {
@@ -85,6 +88,14 @@ function localParse(message, session = {}) {
     res.intent = "create_event";
   } else if (/\b(what do i have|what's my schedule|my appointments|my calendar|check|show me|what do i have)\b/.test(lower)) {
     res.intent = "check_schedule";
+  }
+
+  // Extract goal description for set_goal intent
+  if (res.intent === "set_goal") {
+    const goalMatch = raw.match(/(?:set|create|add)\s+(?:a\s+)?goal\s+(?:to\s+)?(.+)/i);
+    if (goalMatch) {
+      res.goal_description = goalMatch[1].trim();
+    }
   }
 
   // Extract event title from various patterns
@@ -189,7 +200,7 @@ function localParse(message, session = {}) {
 }
 
 // Enhanced LLM parser for personal productivity
-async function llmParse(message, session = {}) {
+async function llmParse(message, session = {}, context = null) {
   if (!openaiClient) throw new Error("No OpenAI client configured");
 
   // Build rich context from session
@@ -199,7 +210,7 @@ async function llmParse(message, session = {}) {
   const hasPendingEvent = activeEvents.some(e => e.preConfirmed && !e.confirmed);
   const hasPendingReschedule = rescheduleState && rescheduleState.preConfirmed;
 
-  const systemPrompt = `
+  let systemPrompt = `
 You are an intelligent personal productivity assistant specializing in calendar management and email composition.
 You excel at understanding ambiguous, incomplete, or conversational requests and inferring user intent.
 
@@ -217,7 +228,8 @@ CURRENT CONTEXT:
 CORE CAPABILITIES:
 1. Calendar: create events, cancel events, reschedule events, check schedule
 2. Email: compose and send emails with recipients, subjects, and body
-3. Context tracking: understand pronouns, partial info, multi-turn conversations
+3. Goals: set personal goals (study hours, exercise frequency, sleep targets, project deadlines)
+4. Context tracking: understand pronouns, partial info, multi-turn conversations
 
 EDGE CASE HANDLING RULES:
 
@@ -246,6 +258,7 @@ D) INTENT DISAMBIGUATION:
    - "get rid of", "remove", "delete", "drop" → intent: "cancel"
    - "push", "shift", "bump", "move" → intent: "reschedule"
    - "what's happening", "free time", "schedule", "day look like" → intent: "check_schedule"
+   - "I want to", "I need to", "goal to", "set a goal" → intent: "set_goal"
 
 E) CONFIRMATION PRIORITY (CRITICAL):
    - If hasPendingEmail AND user says yes/no → intent: "send_email", confirmation_response
@@ -269,7 +282,7 @@ G) MULTI-STEP CONVERSATIONS:
 
 OUTPUT SCHEMA (JSON only, no markdown):
 {
-  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "other",
+  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "set_goal" | "other",
   "title": "string or null",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
@@ -280,6 +293,7 @@ OUTPUT SCHEMA (JSON only, no markdown):
   "notes": "string or null",
   "old_date": "YYYY-MM-DD or null",
   "old_time": "HH:MM or null",
+  "goal_description": "string or null (full description of the goal)",
   "reply": "Helpful natural language response or null",
   "confirmation_response": "yes" | "no" | null
 }
@@ -350,6 +364,40 @@ Output: {"intent": "other", "reply": "What would you like to do tomorrow?"}
 Input: "schedule lunch meeting tomorrow afternoon"
 Output: {"intent": "create_event", "title": "lunch meeting", "date": "2025-10-06", "time": "14:00", "duration_minutes": 60, "reply": null}
 
+16. SET GOAL - Study with deadline:
+Input: "I want to study 10 hours before my exam"
+Output: {"intent": "set_goal", "goal_description": "study 10 hours before my exam", "reply": null}
+
+17. SET GOAL - Exercise recurring:
+Input: "Set a goal to go to the gym 3 times per week"
+Output: {"intent": "set_goal", "goal_description": "go to the gym 3 times per week", "reply": null}
+
+18. SET GOAL - Sleep daily:
+Input: "I need to sleep 7 hours every night"
+Output: {"intent": "set_goal", "goal_description": "sleep 7 hours every night", "reply": null}
+
+19. SET GOAL - Project deadline:
+Input: "I need to finish my project by Friday"
+Output: {"intent": "set_goal", "goal_description": "finish my project by Friday", "reply": null}
+
+20. SET GOAL - Natural phrasing:
+Input: "My goal is to work out 4 times this week"
+Output: {"intent": "set_goal", "goal_description": "work out 4 times this week", "reply": null}
+
+21. SET GOAL - Different verb:
+Input: "I'd like to read 2 books this month"
+Output: {"intent": "set_goal", "goal_description": "read 2 books this month", "reply": null}
+
+22. DISAMBIGUATION - Goal vs Event:
+Input: "I want to study tomorrow at 3pm"
+Output: {"intent": "create_event", "title": "study", "date": "2025-10-06", "time": "15:00", "duration_minutes": 60, "reply": null}
+Note: Specific date/time = event, not goal
+
+23. DISAMBIGUATION - Goal vs Event (goal version):
+Input: "I want to study 15 hours this week"
+Output: {"intent": "set_goal", "goal_description": "study 15 hours this week", "reply": null}
+Note: Total target over period = goal, not single event
+
 CRITICAL REMINDERS:
 - ALWAYS return valid JSON (no markdown, no explanation text)
 - ALWAYS provide helpful "reply" when information is missing or unclear
@@ -358,6 +406,20 @@ CRITICAL REMINDERS:
 - DEFAULT to reasonable values (60min duration, today/tomorrow for dates)
 - For confirmations, CHECK pending operations to route correctly
 `;
+
+  // Add goal management context if applicable
+  if (context === "goal_management") {
+    systemPrompt += `
+
+🎯 IMPORTANT CONTEXT: User is in GOAL MANAGEMENT mode.
+- ALWAYS interpret requests as goal-related (set_goal intent)
+- "I want to study 10 hours" → set_goal with goal_description (NOT create_event)
+- "workout 3 times per week" → set_goal (NOT create_event)
+- Default to set_goal intent when uncertain
+- Extract the full goal description into goal_description field
+- Only use other intents if explicitly about viewing/checking existing goals
+`;
+  }
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -398,7 +460,7 @@ CRITICAL REMINDERS:
     }
 
     // Normalize and validate intent
-    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "other"];
+    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "set_goal", "other"];
     if (!validIntents.includes(parsed.intent)) {
       console.warn(`Invalid intent "${parsed.intent}", defaulting to "other"`);
       parsed.intent = "other";
@@ -459,7 +521,7 @@ CRITICAL REMINDERS:
   }
 }
 
-export async function intentHandler(message = "", session = {}) {
+export async function intentHandler(message = "", session = {}, context = null) {
   message = cleanText(message || "");
 
   const base = {
@@ -476,11 +538,12 @@ export async function intentHandler(message = "", session = {}) {
     old_time: null,
     reply: null,
     confirmation_response: null,
+    goal_description: null,
   };
 
   if (useLLM) {
     try {
-      const parsed = await llmParse(message, session);
+      const parsed = await llmParse(message, session, context);
       return { ...base, ...parsed };
     } catch (err) {
       console.warn("LLM parse failed, falling back to local parser:", err.message);
