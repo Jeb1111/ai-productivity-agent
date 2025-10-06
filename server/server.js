@@ -23,6 +23,20 @@ app.use(express.static("public"));
 // In-memory session storage
 const sessions = new Map();
 
+// Goal Data Structure (Phase 1 - Step 1.2):
+// {
+//   id: string (UUID),
+//   description: string (original user input),
+//   type: string | null (study, exercise, sleep, work, project, other) - Added in Step 1.4,
+//   createdAt: ISO timestamp string,
+//   status: "active" | "completed" | "cancelled"
+// }
+// Additional fields added in Step 1.5:
+//   target_amount: number | null
+//   target_unit: string | null
+//   deadline: ISO date string | null
+//   frequency: string | null
+
 // Helper functions
 function formatFriendly(dateStr, timeStr) {
   try {
@@ -77,6 +91,7 @@ app.post("/chat", async (req, res) => {
   try {
     let sessionState = getSession(sessionId);
     sessionState.activeEvents = sessionState.activeEvents || [];
+    sessionState.goals = sessionState.goals || []; // Step 1.2: Initialize goals array
 
     // CRITICAL: Check if there's an active event creation in progress BEFORE parsing
     const hasActiveEventCreation = sessionState.activeEvents &&
@@ -724,15 +739,115 @@ app.post("/chat", async (req, res) => {
       }
     }
 
-    // Handle set_goal intent
+    // Handle set_goal intent (Step 1.2: Storage implementation)
     else if (parsed.intent === "set_goal") {
-      // For Step 1.1, we just detect and respond - no storage yet
-      if (parsed.goal_description) {
-        parsed.reply = `I detected you want to set a goal: ${parsed.goal_description}`;
-      } else {
+      // Check if goal description exists
+      if (!parsed.goal_description || parsed.goal_description.trim() === "") {
         parsed.reply = "I detected you want to set a goal, but I need more details. What would you like to achieve?";
+        saveSession(sessionId, sessionState);
+        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
       }
 
+      // Create goal object (Step 1.5: with type, target, deadline, frequency)
+      const newGoal = {
+        id: uuidv4(),
+        description: parsed.goal_description.trim(),
+        type: parsed.goal_type || "other", // Step 1.4: Store classified type
+        target_amount: parsed.target_amount || null, // Step 1.5: Numeric target
+        target_unit: parsed.target_unit || null, // Step 1.5: Unit of measurement
+        deadline: parsed.deadline || null, // Step 1.5: ISO date deadline
+        frequency: parsed.frequency || null, // Step 1.5: Recurrence pattern
+        createdAt: new Date().toISOString(),
+        status: "active"
+      };
+
+      // Store goal in session
+      sessionState.goals.push(newGoal);
+
+      // Save session and confirm
+      saveSession(sessionId, sessionState);
+      parsed.reply = `Goal saved! ${newGoal.description}`;
+
+      return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+    }
+
+    // Handle check_goals intent (Step 1.3: View stored goals)
+    else if (parsed.intent === "check_goals") {
+      // Check if goals exist
+      if (!sessionState.goals || sessionState.goals.length === 0) {
+        parsed.reply = "You haven't set any goals yet.";
+        saveSession(sessionId, sessionState);
+        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
+      }
+
+      // Format goals list with type emojis (Step 1.4)
+      let goalsText = "**Your Goals:**\n\n";
+
+      // Emoji mapping for goal types
+      const emojiMap = {
+        study: "📚",
+        exercise: "💪",
+        sleep: "😴",
+        work: "💼",
+        meeting: "📅",
+        health: "❤️",
+        project: "📋",
+        other: "📌"
+      };
+
+      sessionState.goals.forEach((goal, index) => {
+        const emoji = emojiMap[goal.type] || "📌"; // Fallback for null or invalid types
+
+        // Basic line with emoji and description
+        goalsText += `${index + 1}. ${emoji} **${goal.description}**\n`;
+
+        // Add structured target/deadline info if present (Step 1.5)
+        const hasTarget = goal.target_amount && goal.target_unit;
+        const hasDeadline = goal.deadline;
+        const hasFrequency = goal.frequency;
+
+        if (hasTarget || hasDeadline || hasFrequency) {
+          let detailLine = "   ";
+
+          if (hasTarget) {
+            let unit = goal.target_unit;
+            // Smart pluralization for units
+            if (goal.target_amount > 1) {
+              if (unit === 'glass') {
+                unit = 'glasses';
+              } else if (!unit.endsWith('s') && unit !== 'km') {
+                unit += 's'; // Standard pluralization
+              }
+            }
+            detailLine += `Target: ${goal.target_amount} ${unit}`;
+
+            // Add frequency or deadline to target line
+            if (hasFrequency) {
+              detailLine += ` (${goal.frequency})`;
+            } else if (hasDeadline) {
+              const deadlineDate = new Date(goal.deadline);
+              const formatted = deadlineDate.toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric'
+              });
+              detailLine += ` before ${formatted}`;
+            }
+          } else if (hasFrequency) {
+            detailLine += `Frequency: ${goal.frequency}`;
+          } else if (hasDeadline) {
+            const deadlineDate = new Date(goal.deadline);
+            const formatted = deadlineDate.toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric'
+            });
+            detailLine += `Deadline: ${formatted}`;
+          }
+
+          goalsText += detailLine + '\n';
+        }
+
+        goalsText += '\n'; // Extra line between goals
+      });
+
+      parsed.reply = goalsText.trim();
       saveSession(sessionId, sessionState);
       return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
@@ -921,6 +1036,156 @@ app.delete("/api/events/:eventId", async (req, res) => {
     }
 
     res.status(500).json({ error: "Failed to delete event" });
+  }
+});
+
+// Goals API endpoints (Step 1.6: Goals Dashboard)
+
+// GET /api/goals - Fetch all goals for a session
+app.get("/api/goals", (req, res) => {
+  try {
+    const sessionId = req.query.sessionId;
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const goals = sessionState.goals || [];
+
+    return res.json({ goals });
+  } catch (err) {
+    console.error("Error fetching goals:", err);
+    return res.status(500).json({ error: "Failed to fetch goals" });
+  }
+});
+
+// POST /api/goals/parse - Parse natural language input into goal fields
+app.post("/api/goals/parse", async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+
+    if (!message || !sessionId) {
+      return res.status(400).json({ error: "message and sessionId are required" });
+    }
+
+    const sessionState = getSession(sessionId);
+
+    // Parse with goal_management context to bias toward set_goal intent
+    const parsed = await intentHandler(message, sessionState, 'goal_management');
+
+    return res.json({
+      description: parsed.goal_description || message,
+      type: parsed.goal_type || "other",
+      target_amount: parsed.target_amount || null,
+      target_unit: parsed.target_unit || null,
+      deadline: parsed.deadline || null,
+      frequency: parsed.frequency || null
+    });
+  } catch (err) {
+    console.error("Error parsing goal:", err);
+    return res.status(500).json({ error: "Failed to parse goal" });
+  }
+});
+
+// POST /api/goals - Create a new goal
+app.post("/api/goals", async (req, res) => {
+  try {
+    const { sessionId, goalData } = req.body;
+
+    if (!sessionId || !goalData) {
+      return res.status(400).json({ error: "sessionId and goalData are required" });
+    }
+
+    const sessionState = getSession(sessionId);
+
+    // Create goal object
+    const newGoal = {
+      id: uuidv4(),
+      description: goalData.description,
+      type: goalData.type || "other",
+      target_amount: goalData.target_amount || null,
+      target_unit: goalData.target_unit || null,
+      deadline: goalData.deadline || null,
+      frequency: goalData.frequency || null,
+      createdAt: new Date().toISOString(),
+      status: "active"
+    };
+
+    // Initialize goals array if it doesn't exist
+    if (!sessionState.goals) {
+      sessionState.goals = [];
+    }
+
+    sessionState.goals.push(newGoal);
+    saveSession(sessionId, sessionState);
+
+    return res.json({ success: true, goal: newGoal });
+  } catch (err) {
+    console.error("Error creating goal:", err);
+    return res.status(500).json({ error: "Failed to create goal" });
+  }
+});
+
+// PUT /api/goals/:goalId - Update an existing goal
+app.put("/api/goals/:goalId", (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { sessionId, goalData } = req.body;
+
+    if (!sessionId || !goalData) {
+      return res.status(400).json({ error: "sessionId and goalData are required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const goalIndex = sessionState.goals?.findIndex(g => g.id === goalId);
+
+    if (goalIndex === -1 || goalIndex === undefined) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    // Update goal while preserving id, createdAt, and status
+    sessionState.goals[goalIndex] = {
+      ...sessionState.goals[goalIndex],
+      description: goalData.description,
+      type: goalData.type,
+      target_amount: goalData.target_amount || null,
+      target_unit: goalData.target_unit || null,
+      deadline: goalData.deadline || null,
+      frequency: goalData.frequency || null
+    };
+
+    saveSession(sessionId, sessionState);
+    return res.json({ success: true, goal: sessionState.goals[goalIndex] });
+  } catch (err) {
+    console.error("Error updating goal:", err);
+    return res.status(500).json({ error: "Failed to update goal" });
+  }
+});
+
+// DELETE /api/goals/:goalId - Delete a goal
+app.delete("/api/goals/:goalId", (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const sessionId = req.query.sessionId;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const goalIndex = sessionState.goals?.findIndex(g => g.id === goalId);
+
+    if (goalIndex === -1 || goalIndex === undefined) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    sessionState.goals.splice(goalIndex, 1);
+    saveSession(sessionId, sessionState);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting goal:", err);
+    return res.status(500).json({ error: "Failed to delete goal" });
   }
 });
 

@@ -611,87 +611,419 @@
       justify-content: center;
     }
 
-    /* Goals Modal Specific Styles */
-    .goals-modal-content {
+    /* Goals Dashboard Styles (Step 1.6) - Minimalist Black/White/Grey */
+    .goals-dashboard {
       background: #1a1a1a;
-      border: 1px solid #555;
+      border: 1px solid #333;
       border-radius: 16px;
       width: 90%;
-      max-width: 700px;
-      height: 85vh;
-      max-height: 700px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      animation: slideUp 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .goals-chat-area {
-      flex: 1;
+      max-width: 800px;
+      max-height: 85vh;
       overflow-y: auto;
-      padding: 20px;
-      background: #0d0d0d;
+      padding: 24px;
+      animation: slideUp 0.3s ease;
     }
 
-    .goals-welcome {
-      text-align: center;
-      margin: 40px 20px;
+    .goals-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       color: white;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
     }
 
-    .goals-welcome h3 {
-      font-size: 22px;
-      margin-bottom: 15px;
-      color: white;
+    .goals-header h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
     }
 
-    .goals-welcome p {
+    .close-btn {
+      background: none;
+      border: none;
       color: #999;
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 10px;
+      font-size: 28px;
+      cursor: pointer;
+      padding: 0;
+      line-height: 1;
+      transition: color 0.2s;
     }
 
-    .goals-examples {
+    .close-btn:hover {
+      color: white;
+    }
+
+    .new-goal-btn {
+      background: #262626;
+      color: white;
+      border: 1px solid #444;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      margin-bottom: 20px;
+      transition: all 0.2s;
+    }
+
+    .new-goal-btn:hover {
+      background: #333;
+      border-color: #555;
+    }
+
+    .goals-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      margin-top: 20px;
-      align-items: center;
+      gap: 12px;
     }
 
-    .goals-example {
-      background: #262626;
-      border: 1px solid #444;
+    .goal-card {
+      background: #0d0d0d;
+      border: 1px solid #333;
       border-radius: 12px;
-      padding: 10px 16px;
-      font-size: 13px;
-      color: #ccc;
-      max-width: 400px;
-      text-align: left;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.2s;
     }
 
-    .goals-input-area {
+    .goal-card:hover {
+      background: #1a1a1a;
+      border-color: #444;
+    }
+
+    .goal-content {
+      flex: 1;
+    }
+
+    .goal-title {
+      font-weight: 500;
+      font-size: 15px;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    .goal-details {
+      color: #999;
+      font-size: 13px;
+    }
+
+    .goal-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .edit-btn, .delete-btn-small {
+      padding: 6px 14px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: transparent;
+    }
+
+    .edit-btn {
+      color: #ccc;
+    }
+
+    .edit-btn:hover {
       background: #262626;
-      padding: 20px;
+      color: white;
+      border-color: #555;
+    }
+
+    .delete-btn-small {
+      color: #999;
+    }
+
+    .delete-btn-small:hover {
+      background: #262626;
+      color: #ff4444;
+      border-color: #555;
+    }
+
+    .empty-goals-state {
+      text-align: center;
+      color: #999;
+      padding: 60px 20px;
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-goals-state h3 {
+      font-size: 20px;
+      margin-bottom: 8px;
+      color: white;
+      font-weight: 500;
+    }
+
+    .empty-goals-state p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    /* Goal Form Modal Styles (Step 1.6) - Minimalist Black/White/Grey */
+    .goal-form-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 24px;
+      animation: slideUp 0.3s ease;
+    }
+
+    .goal-form-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #333;
+    }
+
+    .goal-form-header h2 {
+      margin: 0;
+      font-size: 20px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .goal-form-header .close-btn {
+      color: #999;
+    }
+
+    .form-label {
+      display: block;
+      font-weight: 500;
+      color: #ccc;
+      margin-bottom: 8px;
+      margin-top: 16px;
+      font-size: 13px;
+    }
+
+    .goal-nl-input {
+      width: 100%;
+      padding: 12px;
+      background: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      color: white;
+    }
+
+    .goal-nl-input:focus {
+      outline: none;
+      border-color: #555;
+      background: #1a1a1a;
+    }
+
+    .parse-btn {
+      background: #262626;
+      color: white;
+      border: 1px solid #444;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 13px;
+      cursor: pointer;
+      float: right;
+      margin-top: 12px;
+      transition: all 0.2s;
+    }
+
+    .parse-btn:hover {
+      background: #333;
+      border-color: #555;
+    }
+
+    .original-input-label {
+      color: #999;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    .original-input-text {
+      color: #ccc;
+      font-style: italic;
+    }
+
+    .form-divider {
+      border: none;
       border-top: 1px solid #333;
+      margin: 16px 0;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: white;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #555;
+      background: #1a1a1a;
+    }
+
+    /* Clean dropdown styling - remove glossy look */
+    .form-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3e%3cpath fill='%23999' d='M10.293 3.293L6 7.586 1.707 3.293A1 1 0 00.293 4.707l5 5a1 1 0 001.414 0l5-5a1 1 0 10-1.414-1.414z'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 12px;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+
+    .form-select:hover {
+      border-color: #555;
+    }
+
+    .form-select option {
+      background: #1a1a1a;
+      color: white;
+      padding: 8px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .form-col {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-actions {
       display: flex;
       gap: 12px;
-      align-items: center;
+      justify-content: flex-end;
+      margin-top: 24px;
     }
 
-    .goals-loading {
-      display: none;
-      color: #999;
-      font-style: italic;
+    .cancel-btn, .save-btn, .delete-btn {
+      padding: 10px 20px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      font-weight: 500;
       font-size: 13px;
-      padding: 8px 16px;
-      margin: 0 20px 10px 20px;
-      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
     }
 
-    .goals-loading.show {
-      display: block;
+    .cancel-btn {
+      background: transparent;
+      color: #999;
+    }
+
+    .cancel-btn:hover {
+      background: #262626;
+      color: white;
+      border-color: #555;
+    }
+
+    .save-btn {
+      background: white;
+      color: #1a1a1a;
+      border-color: white;
+    }
+
+    .save-btn:hover {
+      background: #f0f0f0;
+    }
+
+    .delete-btn {
+      background: transparent;
+      color: #ff4444;
+      border-color: #ff4444;
+    }
+
+    .delete-btn:hover {
+      background: #ff4444;
+      color: white;
+    }
+
+    /* Delete Confirmation Modal - Minimalist */
+    .delete-confirm-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 400px;
+      animation: slideUp 0.3s ease;
+    }
+
+    .delete-confirm-container h3 {
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .delete-confirm-container p {
+      color: #999;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .goal-to-delete {
+      font-weight: 500;
+      color: white;
+      margin: 12px 0;
+    }
+
+    .warning-text {
+      color: #ff4444;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    /* Toast Notification */
+    .toast-notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s;
+      z-index: 10000;
+    }
+
+    .toast-notification.show {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     @media (max-width: 600px) {
@@ -947,43 +1279,109 @@
     </div>
   </div>
 
-  <!-- Goals Modal -->
+  <!-- Goals Dashboard Modal (Step 1.6) -->
   <div id="goalsModal" class="modal">
-    <div class="goals-modal-content">
-      <div class="modal-header">
-        <h2>📋 My Goals</h2>
-        <button class="modal-close" onclick="closeGoalsModal()">&times;</button>
+    <div class="goals-dashboard">
+      <div class="goals-header">
+        <h2>🎯 Your Goals</h2>
+        <button class="close-btn" onclick="closeGoalsModal()">&times;</button>
       </div>
 
-      <div class="goals-chat-area" id="goalsChatArea">
-        <div class="goals-welcome" id="goalsWelcome">
-          <h3>Set and manage your goals</h3>
-          <p>Tell me what you'd like to achieve! I can help you track goals like:</p>
-          <div class="goals-examples">
-            <div class="goals-example">📚 "I want to study 10 hours before my exam on Friday"</div>
-            <div class="goals-example">💪 "Set a goal to workout 3 times per week"</div>
-            <div class="goals-example">😴 "I need to sleep 7 hours every night"</div>
-            <div class="goals-example">📝 "I want to finish my project by next Monday"</div>
+      <button id="newGoalBtn" class="new-goal-btn" onclick="openNewGoalForm()">+ New Goal</button>
+
+      <div id="goalsList" class="goals-list">
+        <!-- Goal cards will be rendered here -->
+      </div>
+
+      <div id="emptyGoalsState" class="empty-goals-state" style="display: none;">
+        <div class="empty-icon">🎯</div>
+        <h3>No goals yet!</h3>
+        <p>Click "New Goal" to set your first objective</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- New/Edit Goal Form Modal (Step 1.6) -->
+  <div id="goalFormModal" class="modal" style="display: none;">
+    <div class="goal-form-container">
+      <div class="goal-form-header">
+        <h2 id="goalFormTitle">Create New Goal</h2>
+        <button class="close-btn" onclick="closeGoalForm()">&times;</button>
+      </div>
+
+      <!-- Natural Language Input Section -->
+      <div id="nlInputSection">
+        <label class="form-label">Describe your goal in plain English:</label>
+        <textarea id="goalNlInput"
+                  class="goal-nl-input"
+                  placeholder="e.g., I want to run 5km daily"
+                  rows="3"></textarea>
+        <button id="parseGoalBtn" class="parse-btn" onclick="parseGoalInput()">Parse Goal ✨</button>
+      </div>
+
+      <!-- Extracted Fields Form (hidden initially) -->
+      <div id="goalFieldsSection" style="display: none;">
+        <p class="original-input-label">Original: <span id="originalInput" class="original-input-text"></span></p>
+        <hr class="form-divider">
+
+        <label class="form-label">Description:</label>
+        <input type="text" id="goalDescription" class="form-input" required>
+
+        <label class="form-label">Type:</label>
+        <select id="goalType" class="form-select">
+          <option value="study">📚 Study</option>
+          <option value="exercise">💪 Exercise</option>
+          <option value="sleep">😴 Sleep</option>
+          <option value="work">💼 Work</option>
+          <option value="meeting">📅 Meeting</option>
+          <option value="health">❤️ Health</option>
+          <option value="project">📋 Project</option>
+          <option value="other">📌 Other</option>
+        </select>
+
+        <div class="form-row">
+          <div class="form-col">
+            <label class="form-label">Target Amount:</label>
+            <input type="number" id="goalTargetAmount" class="form-input" placeholder="e.g., 5" min="0" step="1">
           </div>
-          <p style="margin-top: 20px; font-size: 13px;">Type your goal below to get started</p>
+          <div class="form-col">
+            <label class="form-label">Target Unit:</label>
+            <input type="text" id="goalTargetUnit" class="form-input" placeholder="hours, km, times...">
+          </div>
+        </div>
+
+        <label class="form-label">Frequency:</label>
+        <select id="goalFrequency" class="form-select">
+          <option value="">None</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="3x per week">3x per week</option>
+          <option value="4x per week">4x per week</option>
+          <option value="5x per week">5x per week</option>
+        </select>
+
+        <label class="form-label">Deadline (optional):</label>
+        <input type="date" id="goalDeadline" class="form-input">
+
+        <div class="form-actions">
+          <button class="cancel-btn" onclick="closeGoalForm()">Cancel</button>
+          <button id="saveGoalBtn" class="save-btn" onclick="saveGoal()">Save Goal ✓</button>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div class="goals-loading" id="goalsLoading">Processing your goal...</div>
-
-      <div class="goals-input-area">
-        <input
-          type="text"
-          id="goalsMessageInput"
-          class="message-input"
-          placeholder="Describe your goal..."
-          maxlength="500"
-        />
-        <button id="goalsSendButton" class="send-button" onclick="sendGoalMessage()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </button>
+  <!-- Delete Confirmation Modal (Step 1.6) -->
+  <div id="deleteGoalModal" class="modal" style="display: none;">
+    <div class="delete-confirm-container">
+      <h3>Delete Goal?</h3>
+      <p>Are you sure you want to delete this goal?</p>
+      <p class="goal-to-delete"></p>
+      <p class="warning-text">This action cannot be undone.</p>
+      <div class="form-actions">
+        <button class="cancel-btn" onclick="closeDeleteConfirm()">Cancel</button>
+        <button id="confirmDeleteBtn" class="delete-btn">Delete</button>
       </div>
     </div>
   </div>
@@ -1347,103 +1745,275 @@
       }
     });
 
-    // ============ Goals Modal Functionality ============
-    const goalsChatArea = document.getElementById('goalsChatArea');
-    const goalsMessageInput = document.getElementById('goalsMessageInput');
-    const goalsSendButton = document.getElementById('goalsSendButton');
-    const goalsLoading = document.getElementById('goalsLoading');
-    const goalsWelcome = document.getElementById('goalsWelcome');
+    // ============ Goals Dashboard Functionality (Step 1.6) ============
+    let currentEditGoalId = null;
 
-    function openGoalsModal() {
+    async function openGoalsModal() {
       document.getElementById('goalsModal').classList.add('show');
-      goalsMessageInput.focus();
+      await loadGoalsDashboard();
     }
 
     function closeGoalsModal() {
       document.getElementById('goalsModal').classList.remove('show');
     }
 
-    function addGoalMessage(text, sender) {
-      // Remove welcome message on first interaction
-      if (goalsWelcome && goalsWelcome.parentNode) {
-        goalsWelcome.remove();
+    async function loadGoalsDashboard() {
+      try {
+        const response = await fetch(`/api/goals?sessionId=${sessionId}`);
+        const { goals } = await response.json();
+
+        const goalsList = document.getElementById('goalsList');
+        const emptyState = document.getElementById('emptyGoalsState');
+
+        if (goals.length === 0) {
+          goalsList.style.display = 'none';
+          emptyState.style.display = 'block';
+        } else {
+          goalsList.style.display = 'block';
+          emptyState.style.display = 'none';
+          goalsList.innerHTML = goals.map(goal => renderGoalCard(goal)).join('');
+        }
+      } catch (error) {
+        console.error('Error loading goals:', error);
       }
-
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${sender}`;
-
-      const contentDiv = document.createElement('div');
-      contentDiv.className = 'message-content';
-      contentDiv.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-
-      const timestampDiv = document.createElement('div');
-      timestampDiv.className = 'timestamp';
-      timestampDiv.textContent = new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-
-      contentDiv.appendChild(timestampDiv);
-      messageDiv.appendChild(contentDiv);
-      goalsChatArea.appendChild(messageDiv);
-
-      // Scroll to bottom
-      goalsChatArea.scrollTop = goalsChatArea.scrollHeight;
     }
 
-    async function sendGoalMessage() {
-      const message = goalsMessageInput.value.trim();
-      if (!message) return;
+    function renderGoalCard(goal) {
+      const emojiMap = {
+        study: '📚', exercise: '💪', sleep: '😴',
+        work: '💼', meeting: '📅', health: '❤️',
+        project: '📋', other: '📌'
+      };
+      const emoji = emojiMap[goal.type] || '📌';
 
-      // Disable input and show loading
-      goalsMessageInput.disabled = true;
-      goalsSendButton.disabled = true;
-      goalsLoading.classList.add('show');
+      let details = '';
+      if (goal.target_amount && goal.target_unit) {
+        let unit = goal.target_unit;
+        if (goal.target_amount > 1) {
+          if (unit === 'glass') unit = 'glasses';
+          else if (!unit.endsWith('s') && unit !== 'km') unit += 's';
+        }
+        details = `Target: ${goal.target_amount} ${unit}`;
+        if (goal.frequency) details += ` (${goal.frequency})`;
+        else if (goal.deadline) {
+          const date = new Date(goal.deadline);
+          details += ` before ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        }
+      } else if (goal.frequency) {
+        details = `Frequency: ${goal.frequency}`;
+      } else if (goal.deadline) {
+        const date = new Date(goal.deadline);
+        details = `Deadline: ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
 
-      // Add user message
-      addGoalMessage(message, 'user');
-      goalsMessageInput.value = '';
+      return `
+        <div class="goal-card">
+          <div class="goal-content">
+            <div class="goal-title">${emoji} ${goal.description}</div>
+            ${details ? `<div class="goal-details">${details}</div>` : ''}
+          </div>
+          <div class="goal-actions">
+            <button class="edit-btn" onclick="editGoal('${goal.id}')">Edit</button>
+            <button class="delete-btn-small" onclick="confirmDeleteGoal('${goal.id}', '${goal.description.replace(/'/g, "\\'")}')">Delete</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // ============ Goal Form Functions ============
+    function openNewGoalForm() {
+      currentEditGoalId = null;
+      document.getElementById('goalFormTitle').textContent = 'Create New Goal';
+      document.getElementById('goalNlInput').value = '';
+      document.getElementById('nlInputSection').style.display = 'block';
+      document.getElementById('goalFieldsSection').style.display = 'none';
+      document.getElementById('saveGoalBtn').onclick = saveGoal;
+      document.getElementById('goalFormModal').style.display = 'flex';
+    }
+
+    function closeGoalForm() {
+      document.getElementById('goalFormModal').style.display = 'none';
+      currentEditGoalId = null;
+    }
+
+    async function parseGoalInput() {
+      const input = document.getElementById('goalNlInput').value.trim();
+      if (!input) return;
 
       try {
-        const response = await fetch('/chat', {
+        const response = await fetch('/api/goals/parse', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: message,
-            sessionId: sessionId,
-            context: 'goal_management'  // NEW: Send context to indicate this is a goal request
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: input, sessionId })
         });
 
-        const data = await response.json();
-        addGoalMessage(data.reply, 'bot');
+        const parsed = await response.json();
 
+        // Show original input
+        document.getElementById('originalInput').textContent = input;
+
+        // Populate form fields
+        document.getElementById('goalDescription').value = parsed.description || '';
+        document.getElementById('goalType').value = parsed.type || 'other';
+        document.getElementById('goalTargetAmount').value = parsed.target_amount || '';
+        document.getElementById('goalTargetUnit').value = parsed.target_unit || '';
+        document.getElementById('goalFrequency').value = parsed.frequency || '';
+        document.getElementById('goalDeadline').value = parsed.deadline || '';
+
+        // Show fields section
+        document.getElementById('nlInputSection').style.display = 'none';
+        document.getElementById('goalFieldsSection').style.display = 'block';
       } catch (error) {
-        console.error('Error:', error);
-        addGoalMessage('Sorry, I encountered an error. Please try again.', 'bot');
-      } finally {
-        // Re-enable input
-        goalsMessageInput.disabled = false;
-        goalsSendButton.disabled = false;
-        goalsLoading.classList.remove('show');
-        goalsMessageInput.focus();
+        console.error('Error parsing goal:', error);
+        alert('Failed to parse goal. Please try again.');
       }
     }
 
-    // Enter key to send goal message
-    goalsMessageInput.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        sendGoalMessage();
+    async function saveGoal() {
+      const goalData = {
+        description: document.getElementById('goalDescription').value.trim(),
+        type: document.getElementById('goalType').value,
+        target_amount: parseInt(document.getElementById('goalTargetAmount').value) || null,
+        target_unit: document.getElementById('goalTargetUnit').value.trim() || null,
+        frequency: document.getElementById('goalFrequency').value || null,
+        deadline: document.getElementById('goalDeadline').value || null
+      };
+
+      if (!goalData.description) {
+        alert('Please enter a goal description');
+        return;
       }
+
+      try {
+        const response = await fetch('/api/goals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, goalData })
+        });
+
+        if (response.ok) {
+          closeGoalForm();
+          await loadGoalsDashboard();
+          showToast('Goal saved! 🎯');
+        }
+      } catch (error) {
+        console.error('Error saving goal:', error);
+        alert('Failed to save goal. Please try again.');
+      }
+    }
+
+    async function editGoal(goalId) {
+      try {
+        const response = await fetch(`/api/goals?sessionId=${sessionId}`);
+        const { goals } = await response.json();
+        const goal = goals.find(g => g.id === goalId);
+
+        if (!goal) return;
+
+        currentEditGoalId = goalId;
+        document.getElementById('goalFormTitle').textContent = 'Edit Goal';
+
+        // Pre-fill form directly (skip NL input)
+        document.getElementById('goalDescription').value = goal.description;
+        document.getElementById('goalType').value = goal.type;
+        document.getElementById('goalTargetAmount').value = goal.target_amount || '';
+        document.getElementById('goalTargetUnit').value = goal.target_unit || '';
+        document.getElementById('goalFrequency').value = goal.frequency || '';
+        document.getElementById('goalDeadline').value = goal.deadline || '';
+
+        // Show form directly
+        document.getElementById('nlInputSection').style.display = 'none';
+        document.getElementById('goalFieldsSection').style.display = 'block';
+        document.getElementById('saveGoalBtn').onclick = updateGoal;
+        document.getElementById('goalFormModal').style.display = 'flex';
+      } catch (error) {
+        console.error('Error loading goal:', error);
+      }
+    }
+
+    async function updateGoal() {
+      if (!currentEditGoalId) return;
+
+      const goalData = {
+        description: document.getElementById('goalDescription').value.trim(),
+        type: document.getElementById('goalType').value,
+        target_amount: parseInt(document.getElementById('goalTargetAmount').value) || null,
+        target_unit: document.getElementById('goalTargetUnit').value.trim() || null,
+        frequency: document.getElementById('goalFrequency').value || null,
+        deadline: document.getElementById('goalDeadline').value || null
+      };
+
+      try {
+        const response = await fetch(`/api/goals/${currentEditGoalId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, goalData })
+        });
+
+        if (response.ok) {
+          closeGoalForm();
+          await loadGoalsDashboard();
+          showToast('Goal updated! ✓');
+        }
+      } catch (error) {
+        console.error('Error updating goal:', error);
+        alert('Failed to update goal. Please try again.');
+      }
+    }
+
+    // ============ Delete Goal Functions ============
+    function confirmDeleteGoal(goalId, goalDescription) {
+      document.querySelector('.goal-to-delete').textContent = `"${goalDescription}"`;
+      document.getElementById('confirmDeleteBtn').onclick = () => deleteGoal(goalId);
+      document.getElementById('deleteGoalModal').style.display = 'flex';
+    }
+
+    function closeDeleteConfirm() {
+      document.getElementById('deleteGoalModal').style.display = 'none';
+    }
+
+    async function deleteGoal(goalId) {
+      try {
+        const response = await fetch(`/api/goals/${goalId}?sessionId=${sessionId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          closeDeleteConfirm();
+          await loadGoalsDashboard();
+          showToast('Goal deleted');
+        }
+      } catch (error) {
+        console.error('Error deleting goal:', error);
+        alert('Failed to delete goal. Please try again.');
+      }
+    }
+
+    // Toast notification function
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = 'toast-notification';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+
+      setTimeout(() => toast.classList.add('show'), 100);
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+
+    // Close modals when clicking outside
+    document.getElementById('goalsModal').addEventListener('click', function(e) {
+      if (e.target === this) closeGoalsModal();
     });
 
-    // Close goals modal when clicking outside
-    document.getElementById('goalsModal').addEventListener('click', function(e) {
-      if (e.target === this) {
-        closeGoalsModal();
-      }
+    document.getElementById('goalFormModal').addEventListener('click', function(e) {
+      if (e.target === this) closeGoalForm();
+    });
+
+    document.getElementById('deleteGoalModal').addEventListener('click', function(e) {
+      if (e.target === this) closeDeleteConfirm();
     });
   </script>
 </body>

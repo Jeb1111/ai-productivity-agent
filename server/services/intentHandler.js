@@ -67,6 +67,11 @@ function localParse(message, session = {}) {
     reply: null,
     confirmation_response: null,
     goal_description: null,
+    goal_type: null, // Step 1.4: Type classification
+    target_amount: null, // Step 1.5: Numeric target (e.g., 10, 3, 8)
+    target_unit: null, // Step 1.5: Unit of measurement (e.g., "hours", "times", "km")
+    deadline: null, // Step 1.5: ISO date string (YYYY-MM-DD)
+    frequency: null, // Step 1.5: Recurrence pattern (e.g., "daily", "weekly", "3x per week")
   };
 
   // Email recipient detection for send commands
@@ -78,6 +83,10 @@ function localParse(message, session = {}) {
     res.intent = "send_email";
   } else if (/\b(set|create|add)\s+(?:a\s+)?goal\b/.test(lower)) {
     res.intent = "set_goal";
+  } else if (/\b(what|show|list|view|display)\s+(are\s+)?(my\s+|the\s+)?goals?\b/i.test(lower)) {
+    res.intent = "check_goals";
+  } else if (/^(my\s+)?goals?\??$/i.test(lower)) {
+    res.intent = "check_goals";
   } else if (/\b(cancel|delete|remove|clear|erase|drop|eliminate|destroy)\b/.test(lower)) {
     res.intent = "cancel";
   } else if (/\b(resched|reschedule|move|change|shift)\b/.test(lower)) {
@@ -96,6 +105,60 @@ function localParse(message, session = {}) {
     if (goalMatch) {
       res.goal_description = goalMatch[1].trim();
     }
+  }
+
+  // Extract goal type from description (Step 1.4 - fallback classification)
+  if (res.intent === "set_goal" && res.goal_description) {
+    const desc = res.goal_description.toLowerCase();
+
+    // Check in priority order (primary actions first)
+    if (/\b(study|learn|read|review|practice|homework|exam|course|class|revision|prepare)\b/.test(desc)) {
+      res.goal_type = "study";
+    } else if (/\b(gym|workout|run|jog|exercise|fitness|train|cardio|lift|yoga|swim|sport)\b/.test(desc)) {
+      res.goal_type = "exercise";
+    } else if (/\b(sleep|rest|nap|bedtime|wake)\b/.test(desc)) {
+      res.goal_type = "sleep";
+    } else if (/\b(project|build|develop|make|create)\b/.test(desc)) {
+      res.goal_type = "project";
+    } else if (/\b(meeting|standup|sync|call|conference|attend)\b/.test(desc)) {
+      res.goal_type = "meeting";
+    } else if (/\b(health|water|diet|nutrition|meal|vitamin|medicine|doctor|hydrate|eat)\b/.test(desc)) {
+      res.goal_type = "health";
+    } else if (/\b(work|job|tasks|deliverable|deadline|complete|finish)\b/.test(desc)) {
+      res.goal_type = "work";
+    } else {
+      res.goal_type = "other";
+    }
+  }
+
+  // Extract target amount and unit (Step 1.5)
+  if (res.intent === "set_goal" && res.goal_description) {
+    const desc = res.goal_description;
+
+    // Match patterns like "10 hours", "3 times", "5km", "5 km"
+    const targetMatch = desc.match(/(\d+)\s*(hours?|times?|sessions?|km|kilometers?|minutes?|days?|weeks?|months?)/i);
+    if (targetMatch) {
+      res.target_amount = parseInt(targetMatch[1]);
+      res.target_unit = targetMatch[2].toLowerCase();
+      // Normalize plural forms
+      if (res.target_unit.endsWith('s')) {
+        res.target_unit = res.target_unit.slice(0, -1);
+      }
+    }
+
+    // Extract frequency (Step 1.5)
+    if (/\b(every\s+day|daily|every\s+night|nightly|each\s+day)\b/i.test(desc)) {
+      res.frequency = "daily";
+    } else if (/\b(per\s+week|weekly|every\s+week|each\s+week)\b/i.test(desc)) {
+      res.frequency = "weekly";
+    } else if (/\b(\d+)x?\s+per\s+week\b/i.test(desc)) {
+      const freqMatch = desc.match(/(\d+)x?\s+per\s+week/i);
+      res.frequency = `${freqMatch[1]}x per week`;
+    } else if (/\bmonthly\b/i.test(desc)) {
+      res.frequency = "monthly";
+    }
+
+    // Note: Complex deadline parsing left to LLM (will use chrono-node)
   }
 
   // Extract event title from various patterns
@@ -231,6 +294,48 @@ CORE CAPABILITIES:
 3. Goals: set personal goals (study hours, exercise frequency, sleep targets, project deadlines)
 4. Context tracking: understand pronouns, partial info, multi-turn conversations
 
+GOAL TYPE CLASSIFICATION (Step 1.4):
+When extracting goal_type, use these keyword mappings:
+- study: study, learn, read, review, practice, homework, exam, course, class, revision, prepare
+- exercise: gym, workout, run, jog, exercise, fitness, train, cardio, lift, yoga, swim, sport
+- sleep: sleep, rest, nap, bedtime, wake up
+- work: work, job, tasks, deliverable, deadline, complete (work context), finish (work context)
+- meeting: meeting, standup, sync, call, conference, appointment, attend
+- health: health, water, diet, nutrition, meal, vitamins, medicine, doctor, hydrate, eat
+- project: project, build, create, develop, make, personal project, side project
+- other: anything that doesn't clearly fit above categories
+
+Rules for ambiguous cases:
+- Prioritize the PRIMARY ACTION: "study for work" → study (not work)
+- "exercise for health" → exercise (not health)
+- "read project docs" → study (reading/learning action)
+- If truly unclear → default to "other"
+
+GOAL TARGET/DEADLINE EXTRACTION (Step 1.5):
+When extracting goal target and deadline fields:
+- target_amount: Extract the NUMBER (10, 3, 8, 5, etc.) - set to null if no number present
+- target_unit: Extract the UNIT ("hours", "times", "sessions", "km", "minutes", "days") - set to null if no unit
+- deadline: Parse deadline phrases to ISO date format YYYY-MM-DD - set to null if no deadline
+  - "by Friday" → calculate next Friday's date (e.g., "2025-10-10")
+  - "before my exam on Oct 10" → "2025-10-10"
+  - "this week" / "by end of week" → calculate Friday/Sunday of current week
+  - "next Monday" → calculate next Monday's date
+  - "by next week" → calculate end of next week
+- frequency: Extract recurrence pattern - set to null if not recurring
+  - "every day" / "daily" / "every night" / "each day" → "daily"
+  - "per week" / "weekly" / "every week" / "each week" → "weekly"
+  - "3 times per week" / "3x per week" → "3x per week"
+  - "monthly" / "every month" → "monthly"
+
+IMPORTANT: Set fields to null if not present - do NOT guess or infer values
+Examples:
+- "Study 10 hours before Friday" → amount: 10, unit: "hour", deadline: "2025-10-10", frequency: null
+- "Gym 3 times per week" → amount: 3, unit: "time", frequency: "weekly", deadline: null
+- "Sleep 7 hours every night" → amount: 7, unit: "hour", frequency: "daily", deadline: null
+- "Run 5km daily" → amount: 5, unit: "km", frequency: "daily", deadline: null
+- "Study for my exam" → amount: null, unit: null, deadline: null, frequency: null (NO specific target)
+- "Finish project by Monday" → amount: null, unit: null, deadline: "2025-10-13", frequency: null
+
 EDGE CASE HANDLING RULES:
 
 A) AMBIGUOUS REFERENCES - Always try to resolve:
@@ -282,7 +387,7 @@ G) MULTI-STEP CONVERSATIONS:
 
 OUTPUT SCHEMA (JSON only, no markdown):
 {
-  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "set_goal" | "other",
+  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "set_goal" | "check_goals" | "other",
   "title": "string or null",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
@@ -294,6 +399,11 @@ OUTPUT SCHEMA (JSON only, no markdown):
   "old_date": "YYYY-MM-DD or null",
   "old_time": "HH:MM or null",
   "goal_description": "string or null (full description of the goal)",
+  "goal_type": "study" | "exercise" | "sleep" | "work" | "meeting" | "health" | "project" | "other" | null,
+  "target_amount": number or null,
+  "target_unit": "hour" | "time" | "session" | "km" | "minute" | "day" | "week" | "month" | string | null,
+  "deadline": "YYYY-MM-DD or null",
+  "frequency": "daily" | "weekly" | "monthly" | "Nx per week" | string | null,
   "reply": "Helpful natural language response or null",
   "confirmation_response": "yes" | "no" | null
 }
@@ -364,29 +474,31 @@ Output: {"intent": "other", "reply": "What would you like to do tomorrow?"}
 Input: "schedule lunch meeting tomorrow afternoon"
 Output: {"intent": "create_event", "title": "lunch meeting", "date": "2025-10-06", "time": "14:00", "duration_minutes": 60, "reply": null}
 
-16. SET GOAL - Study with deadline:
+16. SET GOAL - Study with deadline (Step 1.5: with target & deadline):
 Input: "I want to study 10 hours before my exam"
-Output: {"intent": "set_goal", "goal_description": "study 10 hours before my exam", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "study 10 hours before my exam", "goal_type": "study", "target_amount": 10, "target_unit": "hour", "deadline": null, "frequency": null, "reply": null}
+Note: No specific exam date given, so deadline is null
 
-17. SET GOAL - Exercise recurring:
+17. SET GOAL - Exercise recurring (Step 1.5: with target & frequency):
 Input: "Set a goal to go to the gym 3 times per week"
-Output: {"intent": "set_goal", "goal_description": "go to the gym 3 times per week", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "go to the gym 3 times per week", "goal_type": "exercise", "target_amount": 3, "target_unit": "time", "deadline": null, "frequency": "weekly", "reply": null}
 
-18. SET GOAL - Sleep daily:
+18. SET GOAL - Sleep daily (Step 1.5: with target & frequency):
 Input: "I need to sleep 7 hours every night"
-Output: {"intent": "set_goal", "goal_description": "sleep 7 hours every night", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "sleep 7 hours every night", "goal_type": "sleep", "target_amount": 7, "target_unit": "hour", "deadline": null, "frequency": "daily", "reply": null}
 
-19. SET GOAL - Project deadline:
+19. SET GOAL - Project deadline (Step 1.5: with deadline only):
 Input: "I need to finish my project by Friday"
-Output: {"intent": "set_goal", "goal_description": "finish my project by Friday", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "finish my project by Friday", "goal_type": "project", "target_amount": null, "target_unit": null, "deadline": "2025-10-10", "frequency": null, "reply": null}
 
-20. SET GOAL - Natural phrasing:
+20. SET GOAL - Natural phrasing (Step 1.5: with target):
 Input: "My goal is to work out 4 times this week"
-Output: {"intent": "set_goal", "goal_description": "work out 4 times this week", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "work out 4 times this week", "goal_type": "exercise", "target_amount": 4, "target_unit": "time", "deadline": "2025-10-12", "frequency": null, "reply": null}
+Note: "this week" = deadline is end of current week
 
-21. SET GOAL - Different verb:
+21. SET GOAL - Different verb (Step 1.5: with target):
 Input: "I'd like to read 2 books this month"
-Output: {"intent": "set_goal", "goal_description": "read 2 books this month", "reply": null}
+Output: {"intent": "set_goal", "goal_description": "read 2 books this month", "goal_type": "study", "target_amount": 2, "target_unit": "book", "deadline": "2025-10-31", "frequency": null, "reply": null}
 
 22. DISAMBIGUATION - Goal vs Event:
 Input: "I want to study tomorrow at 3pm"
@@ -397,6 +509,81 @@ Note: Specific date/time = event, not goal
 Input: "I want to study 15 hours this week"
 Output: {"intent": "set_goal", "goal_description": "study 15 hours this week", "reply": null}
 Note: Total target over period = goal, not single event
+
+24. CHECK GOALS - Direct:
+Input: "What are my goals?"
+Output: {"intent": "check_goals", "reply": null}
+
+25. CHECK GOALS - Variations:
+Input: "Show me my goals"
+Output: {"intent": "check_goals", "reply": null}
+
+Input: "List goals"
+Output: {"intent": "check_goals", "reply": null}
+
+Input: "View my goals"
+Output: {"intent": "check_goals", "reply": null}
+
+Input: "My goals"
+Output: {"intent": "check_goals", "reply": null}
+
+26. DISAMBIGUATION - Schedule vs Goals:
+Input: "What's my schedule today?"
+Output: {"intent": "check_schedule", "date": "2025-10-05", "reply": null}
+Note: "schedule" keyword = check_schedule, NOT check_goals
+
+Input: "What are my goals?"
+Output: {"intent": "check_goals", "reply": null}
+Note: "goals" keyword = check_goals, NOT check_schedule
+
+27. GOAL TYPE CLASSIFICATION - All 8 types (Step 1.5: with targets/deadlines):
+Input: "I want to learn Python this month"
+Output: {"intent": "set_goal", "goal_description": "learn Python this month", "goal_type": "study", "target_amount": null, "target_unit": null, "deadline": "2025-10-31", "frequency": null, "reply": null}
+
+Input: "Run 5km daily"
+Output: {"intent": "set_goal", "goal_description": "run 5km daily", "goal_type": "exercise", "target_amount": 5, "target_unit": "km", "deadline": null, "frequency": "daily", "reply": null}
+
+Input: "Sleep 8 hours nightly"
+Output: {"intent": "set_goal", "goal_description": "sleep 8 hours nightly", "goal_type": "sleep", "target_amount": 8, "target_unit": "hour", "deadline": null, "frequency": "daily", "reply": null}
+
+Input: "Complete work tasks by EOD"
+Output: {"intent": "set_goal", "goal_description": "complete work tasks by EOD", "goal_type": "work", "target_amount": null, "target_unit": null, "deadline": "2025-10-06", "frequency": null, "reply": null}
+
+Input: "Attend team standup weekly"
+Output: {"intent": "set_goal", "goal_description": "attend team standup weekly", "goal_type": "meeting", "target_amount": null, "target_unit": null, "deadline": null, "frequency": "weekly", "reply": null}
+
+Input: "Drink 8 glasses of water daily"
+Output: {"intent": "set_goal", "goal_description": "drink 8 glasses of water daily", "goal_type": "health", "target_amount": 8, "target_unit": "glass", "deadline": null, "frequency": "daily", "reply": null}
+
+Input: "Build a mobile app by December"
+Output: {"intent": "set_goal", "goal_description": "build a mobile app by December", "goal_type": "project", "target_amount": null, "target_unit": null, "deadline": "2025-12-31", "frequency": null, "reply": null}
+
+Input: "Organize my closet this weekend"
+Output: {"intent": "set_goal", "goal_description": "organize my closet this weekend", "goal_type": "other", "target_amount": null, "target_unit": null, "deadline": "2025-10-12", "frequency": null, "reply": null}
+
+28. GOAL TYPE - Ambiguous cases (Step 1.5: prioritize PRIMARY ACTION):
+Input: "Study for work presentation"
+Output: {"intent": "set_goal", "goal_description": "study for work presentation", "goal_type": "study", "target_amount": null, "target_unit": null, "deadline": null, "frequency": null, "reply": null}
+Note: Primary action is "study", context is "work" → Choose "study"
+
+Input: "Exercise for better health"
+Output: {"intent": "set_goal", "goal_description": "exercise for better health", "goal_type": "exercise", "target_amount": null, "target_unit": null, "deadline": null, "frequency": null, "reply": null}
+Note: Primary action is "exercise", benefit is "health" → Choose "exercise"
+
+29. GOAL WITHOUT SPECIFIC TARGET (Step 1.5: all fields null except description/type):
+Input: "I want to study for my exam"
+Output: {"intent": "set_goal", "goal_description": "study for my exam", "goal_type": "study", "target_amount": null, "target_unit": null, "deadline": null, "frequency": null, "reply": null}
+Note: No specific number, deadline, or frequency - all null is valid
+
+Input: "I need to exercise more"
+Output: {"intent": "set_goal", "goal_description": "exercise more", "goal_type": "exercise", "target_amount": null, "target_unit": null, "deadline": null, "frequency": null, "reply": null}
+
+30. GOAL WITH COMPLEX DEADLINE (Step 1.5: parse deadline dates):
+Input: "Study 15 hours before my exam on Friday"
+Output: {"intent": "set_goal", "goal_description": "study 15 hours before my exam on Friday", "goal_type": "study", "target_amount": 15, "target_unit": "hour", "deadline": "2025-10-10", "frequency": null, "reply": null}
+
+Input: "Complete 20 hours of project work by next Monday"
+Output: {"intent": "set_goal", "goal_description": "complete 20 hours of project work by next Monday", "goal_type": "project", "target_amount": 20, "target_unit": "hour", "deadline": "2025-10-13", "frequency": null, "reply": null}
 
 CRITICAL REMINDERS:
 - ALWAYS return valid JSON (no markdown, no explanation text)
@@ -460,10 +647,19 @@ CRITICAL REMINDERS:
     }
 
     // Normalize and validate intent
-    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "set_goal", "other"];
+    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "set_goal", "check_goals", "other"];
     if (!validIntents.includes(parsed.intent)) {
       console.warn(`Invalid intent "${parsed.intent}", defaulting to "other"`);
       parsed.intent = "other";
+    }
+
+    // Validate goal_type (Step 1.4)
+    if (parsed.goal_type) {
+      const validTypes = ["study", "exercise", "sleep", "work", "meeting", "health", "project", "other"];
+      if (!validTypes.includes(parsed.goal_type)) {
+        console.warn(`Invalid goal_type "${parsed.goal_type}", defaulting to "other"`);
+        parsed.goal_type = "other";
+      }
     }
 
     // Normalize dates using chrono if needed
@@ -539,6 +735,11 @@ export async function intentHandler(message = "", session = {}, context = null) 
     reply: null,
     confirmation_response: null,
     goal_description: null,
+    goal_type: null, // Step 1.4: Type classification
+    target_amount: null, // Step 1.5: Numeric target
+    target_unit: null, // Step 1.5: Unit of measurement
+    deadline: null, // Step 1.5: ISO date string (YYYY-MM-DD)
+    frequency: null, // Step 1.5: Recurrence pattern
   };
 
   if (useLLM) {
