@@ -9,6 +9,7 @@ import { intentHandler } from "./services/intentHandler.js";
 import { v4 as uuidv4 } from "uuid";
 import { sendGmailEmail, draftGmailEmail } from "./services/gmailService.js";
 import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, searchCalendarEvents, getEventsForDateRange } from "./services/calendarService.js";
+import { detectFreeTimeSlots } from "./services/freeTimeDetector.js"; // Phase 2, Step 2.3
 import path from "path";
 
 dotenv.config();
@@ -36,6 +37,8 @@ const sessions = new Map();
 //   target_unit: string | null
 //   deadline: ISO date string | null
 //   frequency: string | null
+// Additional fields added in Phase 2, Step 2.1:
+//   time_preferences: string[] (array of: 'morning', 'afternoon', 'evening', 'weekend')
 
 // Helper functions
 function formatFriendly(dateStr, timeStr) {
@@ -739,7 +742,15 @@ app.post("/chat", async (req, res) => {
       }
     }
 
-    // Handle set_goal intent (Step 1.2: Storage implementation)
+    // Handle redirect_to_goals intent - send users to Goals section
+    else if (parsed.intent === "redirect_to_goals" || parsed.intent === "set_goal" || parsed.intent === "check_goals") {
+      const reply = parsed.reply || "I'd love to help you with your goals! 🎯\n\nPlease use the **Goals** section (click the 📋 Goals button at the top) where you can create, track, and schedule your goals.\n\nThe Goals section makes it much easier to manage your goals!";
+      saveSession(sessionId, sessionState);
+      return res.json({ reply, state: sessionState, sessionId });
+    }
+
+    // OLD: Handle set_goal intent (NOW REDIRECTED TO GOALS SECTION)
+    /*
     else if (parsed.intent === "set_goal") {
       // Check if goal description exists
       if (!parsed.goal_description || parsed.goal_description.trim() === "") {
@@ -757,6 +768,7 @@ app.post("/chat", async (req, res) => {
         target_unit: parsed.target_unit || null, // Step 1.5: Unit of measurement
         deadline: parsed.deadline || null, // Step 1.5: ISO date deadline
         frequency: parsed.frequency || null, // Step 1.5: Recurrence pattern
+        time_preferences: parsed.time_preferences || [], // Phase 2, Step 2.1: Time preferences
         createdAt: new Date().toISOString(),
         status: "active"
       };
@@ -851,6 +863,8 @@ app.post("/chat", async (req, res) => {
       saveSession(sessionId, sessionState);
       return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
+    */
+    // END OF COMMENTED OUT GOAL HANDLING - NOW REDIRECTED TO GOALS SECTION
 
     // Default response
     else {
@@ -1041,6 +1055,237 @@ app.delete("/api/events/:eventId", async (req, res) => {
 
 // Goals API endpoints (Step 1.6: Goals Dashboard)
 
+// POST /api/goals/:goalId/find-slots - Find available time slots for a goal (Phase 2, Step 2.3)
+app.post("/api/goals/:goalId/find-slots", async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    // 1. Get goal from session
+    const sessionState = getSession(sessionId);
+    const goal = sessionState.goals?.find(g => g.id === goalId);
+
+    if (!goal) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    // 2. Get calendar events for next 28 days (4 weeks for recurring goals)
+    const now = new Date();
+    const fourWeeksFromNow = new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000);
+
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: now.toISOString(),
+      timeMax: fourWeeksFromNow.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+
+    const calendarEvents = response.data.items.map(event => ({
+      eventId: event.id,
+      summary: event.summary,
+      startDateTime: event.start.dateTime || event.start.date,
+      endDateTime: event.end.dateTime || event.end.date,
+      location: event.location,
+      description: event.description
+    }));
+
+    // 3. Run free time detection algorithm (returns timeOptions)
+    const result = await detectFreeTimeSlots(calendarEvents, goal, {
+      daysAhead: 28
+    });
+
+    // 4. Return time options and goal
+    return res.json({
+      timeOptions: result.timeOptions,
+      eventCount: result.eventCount,
+      frequency: result.frequency,
+      goal
+    });
+
+  } catch (error) {
+    console.error("Error finding time slots:", error);
+    return res.status(500).json({ error: "Failed to find time slots" });
+  }
+});
+
+// POST /api/goals/:goalId/schedule-recurring - Schedule recurring events directly via Calendar API (Phase 2, Step 2.4)
+app.post("/api/goals/:goalId/schedule-recurring", async (req, res) => {
+  try {
+    const { goalId } = req.params;
+    const { sessionId, events } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: "events array is required" });
+    }
+
+    // 1. Get goal from session
+    const sessionState = getSession(sessionId);
+    const goal = sessionState.goals?.find(g => g.id === goalId);
+
+    if (!goal) {
+      return res.status(404).json({ error: "Goal not found" });
+    }
+
+    // 2. Get calendar API
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    // 3. Build recurrence rule (RRULE) based on goal frequency and deadline
+    const firstEvent = events[0];
+    const startDateTime = new Date(`${firstEvent.date}T${firstEvent.startTime}:00`);
+    const endDateTime = new Date(`${firstEvent.date}T${firstEvent.endTime}:00`);
+
+    let recurrence = [];
+    const freq = (goal.frequency || '').toLowerCase();
+
+    // Use the actual number of events calculated (respecting deadline)
+    const eventCount = events.length;
+
+    // Determine if we should use UNTIL (for long deadlines) or COUNT (for short ones)
+    // Strategy: Use UNTIL if deadline > 4 weeks, otherwise use COUNT
+    const FOUR_WEEKS_MS = 28 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+    let useUntil = false;
+    let untilDate = null;
+
+    if (goal.deadline) {
+      const deadlineDate = new Date(goal.deadline);
+      deadlineDate.setHours(23, 59, 59, 999); // End of deadline day
+      const timeUntilDeadline = deadlineDate - now;
+
+      if (timeUntilDeadline > FOUR_WEEKS_MS) {
+        useUntil = true;
+        untilDate = deadlineDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      }
+    }
+
+    if (freq === 'daily' || freq === 'every day') {
+      // Daily - use UNTIL for long deadlines, COUNT for short ones
+      if (useUntil) {
+        recurrence = [`RRULE:FREQ=DAILY;UNTIL=${untilDate}`];
+      } else {
+        recurrence = [`RRULE:FREQ=DAILY;COUNT=${eventCount}`];
+      }
+    } else if (freq === 'weekly' || freq === 'every week') {
+      // Weekly - use UNTIL for long deadlines, COUNT for short ones
+      const dayOfWeek = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][startDateTime.getDay()];
+      if (useUntil) {
+        recurrence = [`RRULE:FREQ=WEEKLY;UNTIL=${untilDate};BYDAY=${dayOfWeek}`];
+      } else {
+        recurrence = [`RRULE:FREQ=WEEKLY;COUNT=${eventCount};BYDAY=${dayOfWeek}`];
+      }
+    } else if (freq.includes('3') && freq.includes('week')) {
+      // 3 times per week
+      if (useUntil) {
+        recurrence = [`RRULE:FREQ=WEEKLY;UNTIL=${untilDate};BYDAY=MO,WE,FR;INTERVAL=1`];
+      } else {
+        recurrence = [`RRULE:FREQ=WEEKLY;COUNT=${eventCount};BYDAY=MO,WE,FR;INTERVAL=1`];
+      }
+    } else if (freq.includes('2') && freq.includes('week')) {
+      // 2 times per week
+      if (useUntil) {
+        recurrence = [`RRULE:FREQ=WEEKLY;UNTIL=${untilDate};BYDAY=MO,TH;INTERVAL=1`];
+      } else {
+        recurrence = [`RRULE:FREQ=WEEKLY;COUNT=${eventCount};BYDAY=MO,TH;INTERVAL=1`];
+      }
+    } else {
+      // For one-time or unknown frequency, create individual events
+      const results = [];
+      for (const event of events) {
+        try {
+          const startDT = new Date(`${event.date}T${event.startTime}:00`);
+          const endDT = new Date(`${event.date}T${event.endTime}:00`);
+
+          const eventResource = {
+            summary: goal.description,
+            description: `Goal: ${goal.description}\nTarget: ${goal.target_amount} ${goal.target_unit}`,
+            start: {
+              dateTime: startDT.toISOString(),
+              timeZone: 'Australia/Sydney'
+            },
+            end: {
+              dateTime: endDT.toISOString(),
+              timeZone: 'Australia/Sydney'
+            },
+            reminders: {
+              useDefault: false,
+              overrides: [{ method: 'popup', minutes: 30 }]
+            }
+          };
+
+          await calendar.events.insert({
+            calendarId: 'primary',
+            resource: eventResource,
+            sendUpdates: 'none'
+          });
+
+          results.push({ success: true, date: event.date });
+        } catch (error) {
+          console.error(`Error creating event for ${event.date}:`, error);
+          results.push({ success: false, date: event.date, error: error.message });
+        }
+      }
+
+      return res.json({
+        success: true,
+        created: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        recurring: false,
+        results
+      });
+    }
+
+    // 4. Create single recurring event with RRULE
+    const eventResource = {
+      summary: goal.description,
+      description: `Goal: ${goal.description}\nFrequency: ${goal.frequency}\nTarget: ${goal.target_amount} ${goal.target_unit}`,
+      start: {
+        dateTime: startDateTime.toISOString(),
+        timeZone: 'Australia/Sydney'
+      },
+      end: {
+        dateTime: endDateTime.toISOString(),
+        timeZone: 'Australia/Sydney'
+      },
+      recurrence: recurrence,
+      reminders: {
+        useDefault: false,
+        overrides: [{ method: 'popup', minutes: 30 }]
+      }
+    };
+
+    const response = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: eventResource,
+      sendUpdates: 'none'
+    });
+
+    return res.json({
+      success: true,
+      created: events.length,
+      recurring: true,
+      eventId: response.data.id,
+      recurrenceRule: recurrence[0]
+    });
+
+  } catch (error) {
+    console.error("Error scheduling recurring events:", error);
+    return res.status(500).json({ error: "Failed to schedule events", details: error.message });
+  }
+});
+
 // GET /api/goals - Fetch all goals for a session
 app.get("/api/goals", (req, res) => {
   try {
@@ -1098,6 +1343,15 @@ app.post("/api/goals", async (req, res) => {
 
     const sessionState = getSession(sessionId);
 
+    // Validate time_preferences if provided
+    let timePreferences = goalData.time_preferences || [];
+    if (Array.isArray(timePreferences)) {
+      const validPrefs = ['morning', 'afternoon', 'evening', 'weekend'];
+      timePreferences = timePreferences.filter(pref => validPrefs.includes(pref));
+    } else {
+      timePreferences = [];
+    }
+
     // Create goal object
     const newGoal = {
       id: uuidv4(),
@@ -1107,6 +1361,7 @@ app.post("/api/goals", async (req, res) => {
       target_unit: goalData.target_unit || null,
       deadline: goalData.deadline || null,
       frequency: goalData.frequency || null,
+      time_preferences: timePreferences, // Phase 2, Step 2.1
       createdAt: new Date().toISOString(),
       status: "active"
     };
@@ -1143,6 +1398,15 @@ app.put("/api/goals/:goalId", (req, res) => {
       return res.status(404).json({ error: "Goal not found" });
     }
 
+    // Validate time_preferences if provided
+    let timePreferences = goalData.time_preferences || [];
+    if (Array.isArray(timePreferences)) {
+      const validPrefs = ['morning', 'afternoon', 'evening', 'weekend'];
+      timePreferences = timePreferences.filter(pref => validPrefs.includes(pref));
+    } else {
+      timePreferences = [];
+    }
+
     // Update goal while preserving id, createdAt, and status
     sessionState.goals[goalIndex] = {
       ...sessionState.goals[goalIndex],
@@ -1151,7 +1415,8 @@ app.put("/api/goals/:goalId", (req, res) => {
       target_amount: goalData.target_amount || null,
       target_unit: goalData.target_unit || null,
       deadline: goalData.deadline || null,
-      frequency: goalData.frequency || null
+      frequency: goalData.frequency || null,
+      time_preferences: timePreferences // Phase 2, Step 2.1
     };
 
     saveSession(sessionId, sessionState);

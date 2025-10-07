@@ -717,7 +717,7 @@
       gap: 8px;
     }
 
-    .edit-btn, .delete-btn-small {
+    .edit-btn, .delete-btn-small, .find-time-btn {
       padding: 6px 14px;
       border: 1px solid #444;
       border-radius: 6px;
@@ -726,6 +726,24 @@
       cursor: pointer;
       transition: all 0.2s;
       background: transparent;
+    }
+
+    .find-time-btn {
+      background: #1a1a1a;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .find-time-btn:hover {
+      background: #262626;
+      border-color: #666;
+      transform: translateY(-1px);
+    }
+
+    .find-time-btn:active {
+      transform: translateY(0);
     }
 
     .edit-btn {
@@ -920,6 +938,46 @@
       flex-direction: column;
     }
 
+    /* Time Preferences Grid (Phase 2, Step 2.1) */
+    .time-prefs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+
+    .time-pref-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      color: #ccc;
+    }
+
+    .time-pref-option:hover {
+      background: #1a1a1a;
+      border-color: #555;
+    }
+
+    .time-pref-option input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .time-pref-option span {
+      flex: 1;
+      user-select: none;
+    }
+
     .form-actions {
       display: flex;
       gap: 12px;
@@ -1024,6 +1082,272 @@
     .toast-notification.show {
       opacity: 1;
       transform: translateY(0);
+    }
+
+    /* Slot Preview Modal (Phase 2, Step 2.4) */
+    .slot-preview-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.3s ease;
+    }
+
+    .slot-preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+
+    .slot-preview-header h2 {
+      margin: 0;
+      font-size: 18px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .slot-preview-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .slot-summary {
+      color: #ccc;
+      font-size: 15px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .slot-summary strong {
+      color: #4a9eff;
+      font-size: 16px;
+    }
+
+    .time-question {
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .time-options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .time-option-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: #0d0d0d;
+      border: 2px solid #333;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .time-option-item:hover {
+      background: #1a1a1a;
+      border-color: #555;
+    }
+
+    .time-option-item.selected {
+      background: #1a2a3a;
+      border-color: #4a9eff;
+    }
+
+    .time-option-item input[type="radio"] {
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      flex-shrink: 0;
+      accent-color: #4a9eff;
+    }
+
+    .time-option-details {
+      flex: 1;
+    }
+
+    .time-option-label {
+      display: block;
+      font-weight: 500;
+      color: white;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .time-option-meta {
+      color: #999;
+      font-size: 13px;
+    }
+
+    .event-preview-section {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #333;
+    }
+
+    .preview-label {
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .event-dates-preview {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 12px;
+      background: #0d0d0d;
+      border: 1px solid #333;
+      border-radius: 8px;
+    }
+
+    .event-dates-preview::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .event-dates-preview::-webkit-scrollbar-track {
+      background: #0d0d0d;
+      border-radius: 3px;
+    }
+
+    .event-dates-preview::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+
+    .date-badge {
+      padding: 6px 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #ccc;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .slot-preview-footer {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      padding: 20px;
+      border-top: 1px solid #333;
+      flex-shrink: 0;
+    }
+
+    /* Goal Saved Confirmation Modal */
+    .confirmation-container {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 440px;
+      display: flex;
+      flex-direction: column;
+      animation: slideUp 0.3s ease;
+    }
+
+    .confirmation-content {
+      padding: 32px 24px 24px 24px;
+      text-align: center;
+    }
+
+    .confirmation-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      animation: scaleIn 0.4s ease;
+    }
+
+    @keyframes scaleIn {
+      0% {
+        transform: scale(0.5);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .confirmation-title {
+      margin: 0 0 16px 0;
+      font-size: 24px;
+      color: white;
+      font-weight: 600;
+    }
+
+    .confirmation-message {
+      color: white;
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .confirmation-description {
+      color: #999;
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .confirmation-buttons {
+      display: flex;
+      gap: 12px;
+      padding: 0 24px 24px 24px;
+      justify-content: stretch;
+    }
+
+    .not-now-btn, .find-time-confirm-btn {
+      flex: 1;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .not-now-btn {
+      background: transparent;
+      border: 2px solid #444;
+      color: #ccc;
+    }
+
+    .not-now-btn:hover {
+      background: #262626;
+      border-color: #666;
+      color: white;
+    }
+
+    .find-time-confirm-btn {
+      background: #4a9eff;
+      color: white;
+      border: 2px solid #4a9eff;
+    }
+
+    .find-time-confirm-btn:hover {
+      background: #3a8eef;
+      border-color: #3a8eef;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
     }
 
     @media (max-width: 600px) {
@@ -1361,6 +1685,26 @@
           <option value="5x per week">5x per week</option>
         </select>
 
+        <label class="form-label">When do you prefer to work on this?</label>
+        <div class="time-prefs-grid">
+          <label class="time-pref-option">
+            <input type="checkbox" value="morning" class="time-pref-checkbox">
+            <span>Mornings (6am-12pm)</span>
+          </label>
+          <label class="time-pref-option">
+            <input type="checkbox" value="afternoon" class="time-pref-checkbox">
+            <span>Afternoons (12pm-6pm)</span>
+          </label>
+          <label class="time-pref-option">
+            <input type="checkbox" value="evening" class="time-pref-checkbox">
+            <span>Evenings (6pm-10pm)</span>
+          </label>
+          <label class="time-pref-option">
+            <input type="checkbox" value="weekend" class="time-pref-checkbox">
+            <span>Weekends only</span>
+          </label>
+        </div>
+
         <label class="form-label">Deadline (optional):</label>
         <input type="date" id="goalDeadline" class="form-input">
 
@@ -1382,6 +1726,66 @@
       <div class="form-actions">
         <button class="cancel-btn" onclick="closeDeleteConfirm()">Cancel</button>
         <button id="confirmDeleteBtn" class="delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slot Preview Modal (Phase 2, Step 2.4) -->
+  <div id="slotPreviewModal" class="modal" style="display: none;">
+    <div class="slot-preview-container">
+      <div class="slot-preview-header">
+        <h2 id="slotPreviewTitle">Schedule Time for Goal</h2>
+        <button class="close-btn" onclick="closeSlotPreviewModal()">&times;</button>
+      </div>
+
+      <div class="slot-preview-body">
+        <p class="slot-summary" id="slotSummary">
+          I'll schedule <strong id="eventCountText">0</strong> sessions for this goal.
+        </p>
+
+        <p class="time-question">What time works best for you?</p>
+
+        <div class="time-options-list" id="timeOptionsList">
+          <!-- Radio buttons for time options will be rendered here -->
+        </div>
+
+        <div class="event-preview-section">
+          <p class="preview-label">Upcoming sessions:</p>
+          <div class="event-dates-preview" id="eventDatesPreview">
+            <!-- Preview of scheduled dates will be rendered here -->
+          </div>
+        </div>
+      </div>
+
+      <div class="slot-preview-footer">
+        <button class="cancel-btn" onclick="closeSlotPreviewModal()">Cancel</button>
+        <button class="save-btn" onclick="scheduleSelectedSlots()">
+          📅 Book Events
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Goal Saved Confirmation Modal -->
+  <div id="goalSavedConfirmModal" class="modal" style="display: none;">
+    <div class="confirmation-container">
+      <div class="confirmation-content">
+        <div class="confirmation-icon">🎯</div>
+        <h2 class="confirmation-title">Goal Saved!</h2>
+        <p class="confirmation-message">
+          Want me to find time for this goal in your calendar?
+        </p>
+        <p class="confirmation-description">
+          I'll analyze your schedule and suggest available time slots.
+        </p>
+      </div>
+      <div class="confirmation-buttons">
+        <button class="not-now-btn" onclick="closeGoalSavedConfirm()">
+          Not Now
+        </button>
+        <button class="find-time-confirm-btn" onclick="confirmFindTime()">
+          Yes, Find Time ✓
+        </button>
       </div>
     </div>
   </div>
@@ -1742,6 +2146,7 @@
         closeEventModal();
         closeDeleteModal();
         closeGoalsModal();
+        closeSlotPreviewModal();
       }
     });
 
@@ -1806,6 +2211,12 @@
         details = `Deadline: ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
       }
 
+      // Check if goal needs scheduling (Phase 2, Step 2.3)
+      const needsScheduling = goal.target_amount && goal.target_unit;
+      const findTimeButton = needsScheduling
+        ? `<button class="find-time-btn" onclick="findTimeForGoal('${goal.id}')">📅 Find Time</button>`
+        : '';
+
       return `
         <div class="goal-card">
           <div class="goal-content">
@@ -1813,6 +2224,7 @@
             ${details ? `<div class="goal-details">${details}</div>` : ''}
           </div>
           <div class="goal-actions">
+            ${findTimeButton}
             <button class="edit-btn" onclick="editGoal('${goal.id}')">Edit</button>
             <button class="delete-btn-small" onclick="confirmDeleteGoal('${goal.id}', '${goal.description.replace(/'/g, "\\'")}')">Delete</button>
           </div>
@@ -1825,6 +2237,12 @@
       currentEditGoalId = null;
       document.getElementById('goalFormTitle').textContent = 'Create New Goal';
       document.getElementById('goalNlInput').value = '';
+
+      // Reset time preference checkboxes (Phase 2, Step 2.1)
+      document.querySelectorAll('.time-pref-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+      });
+
       document.getElementById('nlInputSection').style.display = 'block';
       document.getElementById('goalFieldsSection').style.display = 'none';
       document.getElementById('saveGoalBtn').onclick = saveGoal;
@@ -1870,13 +2288,18 @@
     }
 
     async function saveGoal() {
+      // Collect time preferences from checkboxes
+      const timePreferences = Array.from(document.querySelectorAll('.time-pref-checkbox:checked'))
+        .map(checkbox => checkbox.value);
+
       const goalData = {
         description: document.getElementById('goalDescription').value.trim(),
         type: document.getElementById('goalType').value,
         target_amount: parseInt(document.getElementById('goalTargetAmount').value) || null,
         target_unit: document.getElementById('goalTargetUnit').value.trim() || null,
         frequency: document.getElementById('goalFrequency').value || null,
-        deadline: document.getElementById('goalDeadline').value || null
+        deadline: document.getElementById('goalDeadline').value || null,
+        time_preferences: timePreferences // Phase 2, Step 2.1
       };
 
       if (!goalData.description) {
@@ -1892,9 +2315,22 @@
         });
 
         if (response.ok) {
+          const result = await response.json();
+          const goalId = result.goal.id; // Fix: Access goal.id instead of goalId
+
+          // Check if goal needs scheduling (has target_amount + target_unit)
+          const needsScheduling = goalData.target_amount && goalData.target_unit;
+
           closeGoalForm();
-          await loadGoalsDashboard();
-          showToast('Goal saved! 🎯');
+
+          if (needsScheduling) {
+            // Show confirmation modal for scheduling
+            openGoalSavedConfirmModal(goalId);
+          } else {
+            // No scheduling needed - just refresh and show toast
+            await loadGoalsDashboard();
+            showToast('Goal saved! 🎯');
+          }
         }
       } catch (error) {
         console.error('Error saving goal:', error);
@@ -1921,6 +2357,17 @@
         document.getElementById('goalFrequency').value = goal.frequency || '';
         document.getElementById('goalDeadline').value = goal.deadline || '';
 
+        // Pre-fill time preferences (Phase 2, Step 2.1)
+        document.querySelectorAll('.time-pref-checkbox').forEach(checkbox => {
+          checkbox.checked = false; // Reset all first
+        });
+        if (goal.time_preferences && Array.isArray(goal.time_preferences)) {
+          goal.time_preferences.forEach(pref => {
+            const checkbox = document.querySelector(`.time-pref-checkbox[value="${pref}"]`);
+            if (checkbox) checkbox.checked = true;
+          });
+        }
+
         // Show form directly
         document.getElementById('nlInputSection').style.display = 'none';
         document.getElementById('goalFieldsSection').style.display = 'block';
@@ -1934,13 +2381,18 @@
     async function updateGoal() {
       if (!currentEditGoalId) return;
 
+      // Collect time preferences from checkboxes
+      const timePreferences = Array.from(document.querySelectorAll('.time-pref-checkbox:checked'))
+        .map(checkbox => checkbox.value);
+
       const goalData = {
         description: document.getElementById('goalDescription').value.trim(),
         type: document.getElementById('goalType').value,
         target_amount: parseInt(document.getElementById('goalTargetAmount').value) || null,
         target_unit: document.getElementById('goalTargetUnit').value.trim() || null,
         frequency: document.getElementById('goalFrequency').value || null,
-        deadline: document.getElementById('goalDeadline').value || null
+        deadline: document.getElementById('goalDeadline').value || null,
+        time_preferences: timePreferences // Phase 2, Step 2.1
       };
 
       try {
@@ -2003,6 +2455,313 @@
       }, 2000);
     }
 
+    // ============ Find Time Functions (Phase 2, Step 2.3) ============
+
+    /**
+     * Find available time slots for a goal
+     * @param {string} goalId - The goal's unique ID
+     */
+    async function findTimeForGoal(goalId) {
+      try {
+        // Show loading state
+        showToast('Finding available time slots...');
+
+        // Call backend API to find slots
+        const response = await fetch(`/api/goals/${goalId}/find-slots`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to find time slots');
+        }
+
+        const data = await response.json();
+        // data = { timeOptions: [...], eventCount: N, frequency: 'daily', goal: {...} }
+
+        // Check if any time options were found
+        if (!data.timeOptions || data.timeOptions.length === 0) {
+          showToast('No available time slots found. Try adjusting your preferences.');
+          return;
+        }
+
+        // Open slot preview modal with time options
+        openSlotPreviewModal(data);
+
+      } catch (error) {
+        console.error('Error finding time slots:', error);
+        showToast('Failed to find time slots. Please try again.');
+      }
+    }
+
+    /**
+     * Open slot preview modal with time options (Phase 2, Step 2.4 - Option C)
+     * @param {Object} data - { timeOptions, eventCount, frequency, goal }
+     */
+    function openSlotPreviewModal(data) {
+      // Store data for later use
+      window.currentScheduleData = data;
+      window.selectedTimeOption = null;
+
+      // Update modal title
+      document.getElementById('slotPreviewTitle').textContent = `Schedule Time for "${data.goal.description}"`;
+
+      // Update event count
+      document.getElementById('eventCountText').textContent = data.eventCount;
+
+      // Render time options (radio buttons)
+      renderTimeOptions(data.timeOptions);
+
+      // Pre-select first option and update preview
+      if (data.timeOptions.length > 0) {
+        selectTimeOption(0);
+      }
+
+      // Show modal
+      document.getElementById('slotPreviewModal').style.display = 'flex';
+    }
+
+    /**
+     * Render time options as radio buttons
+     * @param {Array} timeOptions - Array of time option objects
+     */
+    function renderTimeOptions(timeOptions) {
+      const timeOptionsList = document.getElementById('timeOptionsList');
+      timeOptionsList.innerHTML = '';
+
+      timeOptions.forEach((option, index) => {
+        const optionItem = document.createElement('div');
+        optionItem.className = 'time-option-item';
+        optionItem.onclick = () => selectTimeOption(index);
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'timeOption';
+        radio.id = `time-option-${index}`;
+        radio.value = index;
+        radio.checked = index === 0; // Pre-select first option
+
+        const details = document.createElement('div');
+        details.className = 'time-option-details';
+
+        const firstEvent = option.events[0];
+        const timeRange = formatSlotTime(firstEvent.startTime, firstEvent.endTime);
+
+        details.innerHTML = `
+          <span class="time-option-label">${option.label} (${timeRange})</span>
+          <span class="time-option-meta">${option.totalEvents} session${option.totalEvents !== 1 ? 's' : ''} scheduled</span>
+        `;
+
+        optionItem.appendChild(radio);
+        optionItem.appendChild(details);
+        timeOptionsList.appendChild(optionItem);
+      });
+    }
+
+    /**
+     * Select a time option and update preview
+     * @param {number} index - Index of the time option
+     */
+    function selectTimeOption(index) {
+      // Update radio button
+      const radio = document.getElementById(`time-option-${index}`);
+      if (radio) radio.checked = true;
+
+      // Update visual selection
+      document.querySelectorAll('.time-option-item').forEach((item, i) => {
+        if (i === index) {
+          item.classList.add('selected');
+        } else {
+          item.classList.remove('selected');
+        }
+      });
+
+      // Store selected option
+      window.selectedTimeOption = window.currentScheduleData.timeOptions[index];
+
+      // Update event preview
+      updateEventPreview(window.selectedTimeOption.events);
+    }
+
+    /**
+     * Update event dates preview section
+     * @param {Array} events - Array of event objects
+     */
+    function updateEventPreview(events) {
+      const preview = document.getElementById('eventDatesPreview');
+      preview.innerHTML = '';
+
+      events.forEach(event => {
+        const badge = document.createElement('div');
+        badge.className = 'date-badge';
+
+        const dateLabel = formatSlotDate(event.date);
+        const timeLabel = formatSlotTime(event.startTime, event.endTime);
+
+        badge.textContent = `${dateLabel} • ${timeLabel}`;
+        preview.appendChild(badge);
+      });
+    }
+
+    /**
+     * Format date for display (e.g., "Tomorrow", "Wed Oct 8")
+     */
+    function formatSlotDate(dateString) {
+      const date = new Date(dateString + 'T12:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const slotDate = new Date(dateString + 'T12:00:00');
+      slotDate.setHours(0, 0, 0, 0);
+
+      // Check if today
+      if (slotDate.getTime() === today.getTime()) {
+        return 'Today';
+      }
+
+      // Check if tomorrow
+      if (slotDate.getTime() === tomorrow.getTime()) {
+        return 'Tomorrow';
+      }
+
+      // Format as "Wed Oct 8"
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `${dayName} ${monthDay}`;
+    }
+
+    /**
+     * Format time range (e.g., "7:00am - 8:30am")
+     */
+    function formatSlotTime(startTime, endTime) {
+      const formatTime = (time) => {
+        const [hours, minutes] = time.split(':');
+        const hour = parseInt(hours);
+        const period = hour >= 12 ? 'pm' : 'am';
+        const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        return minutes === '00'
+          ? `${displayHour}${period}`
+          : `${displayHour}:${minutes}${period}`;
+      };
+
+      return `${formatTime(startTime)} - ${formatTime(endTime)}`;
+    }
+
+    /**
+     * Close slot preview modal
+     */
+    function closeSlotPreviewModal() {
+      document.getElementById('slotPreviewModal').style.display = 'none';
+      window.currentScheduleData = null;
+      window.selectedTimeOption = null;
+    }
+
+    /**
+     * Open goal saved confirmation modal
+     * @param {string} goalId - The saved goal's ID
+     */
+    function openGoalSavedConfirmModal(goalId) {
+      window.pendingGoalId = goalId;
+      document.getElementById('goalSavedConfirmModal').style.display = 'flex';
+    }
+
+    /**
+     * Close confirmation modal (Not Now button)
+     */
+    async function closeGoalSavedConfirm() {
+      document.getElementById('goalSavedConfirmModal').style.display = 'none';
+      window.pendingGoalId = null;
+
+      // Refresh goals list and show success toast
+      await loadGoalsDashboard();
+      showToast('Goal saved! 🎯');
+    }
+
+    /**
+     * User confirmed - find time immediately
+     */
+    async function confirmFindTime() {
+      const goalId = window.pendingGoalId;
+
+      // Close confirmation modal
+      document.getElementById('goalSavedConfirmModal').style.display = 'none';
+
+      // Refresh goals list first
+      await loadGoalsDashboard();
+
+      // Open find time flow
+      await findTimeForGoal(goalId);
+
+      window.pendingGoalId = null;
+    }
+
+    /**
+     * Schedule selected time option as calendar events
+     */
+    async function scheduleSelectedSlots() {
+      try {
+        if (!window.selectedTimeOption) {
+          showToast('Please select a time option');
+          return;
+        }
+
+        const events = window.selectedTimeOption.events;
+        const goal = window.currentScheduleData.goal;
+
+        if (events.length === 0) {
+          showToast('No events to schedule');
+          return;
+        }
+
+        // Show loading state
+        const isRecurring = goal.frequency && goal.frequency.toLowerCase() !== 'one-time';
+        const loadingMsg = isRecurring
+          ? `Creating recurring event series...`
+          : `Creating ${events.length} event${events.length !== 1 ? 's' : ''}...`;
+        showToast(loadingMsg);
+
+        // Call direct API endpoint
+        const response = await fetch(`/api/goals/${goal.id}/schedule-recurring`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            events: events
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to schedule events');
+        }
+
+        const result = await response.json();
+
+        // Close modal
+        closeSlotPreviewModal();
+
+        // Refresh events sidebar
+        await loadUpcomingEvents();
+
+        // Show success message
+        if (result.success) {
+          if (result.recurring) {
+            showToast(`✓ Recurring series created! ${result.created} event${result.created !== 1 ? 's' : ''} scheduled.`);
+          } else {
+            showToast(`✓ ${result.created} event${result.created !== 1 ? 's' : ''} scheduled successfully!`);
+          }
+        } else {
+          showToast(`⚠ ${result.created} scheduled, ${result.failed} failed. Check console for details.`);
+        }
+
+      } catch (error) {
+        console.error('Error scheduling events:', error);
+        showToast('Failed to schedule events. Please try again.');
+      }
+    }
+
     // Close modals when clicking outside
     document.getElementById('goalsModal').addEventListener('click', function(e) {
       if (e.target === this) closeGoalsModal();
@@ -2014,6 +2773,14 @@
 
     document.getElementById('deleteGoalModal').addEventListener('click', function(e) {
       if (e.target === this) closeDeleteConfirm();
+    });
+
+    document.getElementById('slotPreviewModal').addEventListener('click', function(e) {
+      if (e.target === this) closeSlotPreviewModal();
+    });
+
+    document.getElementById('goalSavedConfirmModal').addEventListener('click', function(e) {
+      if (e.target === this) closeGoalSavedConfirm();
     });
   </script>
 </body>

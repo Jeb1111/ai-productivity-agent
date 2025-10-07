@@ -47,6 +47,31 @@ function toHHMM(jsDate) {
   }
 }
 
+/**
+ * Detect if message is about goal management (create/update/delete goals)
+ * These requests should be redirected to the Goals section
+ */
+function isGoalManagementRequest(message) {
+  const lower = message.toLowerCase();
+
+  const goalKeywords = [
+    /\b(set|create|add|make|new)\s+(?:a\s+)?goal\b/i,
+    /\bgoal\s+(?:to|of|is)\b/i,
+    /\bmy\s+goal\s+is\b/i,
+    /\b(update|change|modify|edit)\s+(?:my\s+)?goal/i,
+    /\b(delete|remove|drop)\s+(?:my\s+)?goal/i,
+    /\btrack\s+(?:my\s+)?progress\b/i,
+    /\b(?:what|show|list|view|display)\s+(?:are\s+)?(?:my\s+|the\s+)?goals?\b/i,
+    /^(?:my\s+)?goals?\??$/i,
+    // "I want to" patterns with measurable targets (likely goals)
+    /\bI\s+want\s+to\s+\w+\s+\d+/i, // "I want to run 5km"
+    /\bI\s+need\s+to\s+\w+\s+\d+/i, // "I need to study 10 hours"
+    /\bI['']d\s+like\s+to\s+\w+\s+\d+/i, // "I'd like to read 2 books"
+  ];
+
+  return goalKeywords.some(pattern => pattern.test(message));
+}
+
 // Enhanced local parser for personal productivity
 function localParse(message, session = {}) {
   const raw = cleanText(message);
@@ -741,6 +766,16 @@ export async function intentHandler(message = "", session = {}, context = null) 
     deadline: null, // Step 1.5: ISO date string (YYYY-MM-DD)
     frequency: null, // Step 1.5: Recurrence pattern
   };
+
+  // Early return: Redirect goal management requests to Goals section
+  // (unless in goal_management context)
+  if (context !== 'goal_management' && isGoalManagementRequest(message)) {
+    return {
+      ...base,
+      intent: 'redirect_to_goals',
+      reply: "I'd love to help you with your goals! 🎯\n\nPlease use the **Goals** section (click the 📋 Goals button at the top) where you can create, track, and schedule your goals with a dedicated interface.\n\nThe Goals section makes it much easier to:\n• Set measurable targets\n• Choose time preferences\n• Schedule time automatically\n• Track your progress"
+    };
+  }
 
   if (useLLM) {
     try {
