@@ -259,8 +259,9 @@ function calculateEventCount(goal, firstDate) {
   const deadline = new Date(goal.deadline);
   deadline.setHours(23, 59, 59, 999); // End of deadline day (inclusive)
 
-  // Calculate days INCLUDING the deadline day (+1 to be inclusive)
-  const daysUntilDeadline = Math.ceil((deadline - start) / (1000 * 60 * 60 * 24)) + 1;
+  // Calculate days INCLUDING both start and end dates
+  // Example: Oct 9 to Oct 15 = 7 days (9,10,11,12,13,14,15)
+  const daysUntilDeadline = Math.round((deadline - start) / (1000 * 60 * 60 * 24)) + 1;
 
   if (daysUntilDeadline <= 0) return 1; // Deadline already passed, schedule at least 1
 
@@ -313,7 +314,9 @@ function getRecurringDates(frequency, firstDate, validDates, deadline = null, ma
   const isBeforeDeadline = (dateStr) => {
     if (!deadlineDate) return true;
     const date = new Date(dateStr + 'T00:00:00'); // Start of event day
-    return date <= deadlineDate;
+    const result = date <= deadlineDate;
+    console.log(`[DEBUG DEADLINE] Checking ${dateStr}: date=${date.toISOString()}, deadline=${deadlineDate.toISOString()}, allowed=${result}`);
+    return result;
   };
 
   if (freq === 'daily' || freq === 'every day') {
@@ -527,10 +530,10 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
       const daySlotEntry = daySlots.find(s => s.date === date);
 
       if (daySlotEntry && daySlotEntry.slots) {
-        // Add all available sessions for this day (up to max_sessions_per_day)
+        // Add sessions for this day based on distribution strategy
         const sessionsToAdd = distributionStrategy === 'finish_quickly'
           ? daySlotEntry.slots.length  // Use all available slots
-          : Math.min(1, daySlotEntry.slots.length); // Spread evenly: 1 per day
+          : Math.min(maxSessionsPerDay, daySlotEntry.slots.length); // Spread evenly: respect max_sessions_per_day
 
         for (let i = 0; i < sessionsToAdd && events.length < totalSessionsNeeded; i++) {
           const slot = daySlotEntry.slots[i];
@@ -565,6 +568,8 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
       if (events.length >= totalSessionsNeeded) break;
     }
 
+    console.log(`[DEBUG] ${pref}: found ${events.length} events (needed ${totalSessionsNeeded})`);
+
     if (events.length > 0) {
       timeOptions.push({
         timeSlot: pref,
@@ -575,6 +580,8 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
       });
     }
   }
+
+  console.log(`[DEBUG] Final timeOptions count: ${timeOptions.length}`);
 
   return {
     timeOptions,

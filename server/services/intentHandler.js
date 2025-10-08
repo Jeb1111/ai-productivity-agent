@@ -83,9 +83,6 @@ function localParse(message, session = {}) {
     date: null,
     time: null,
     duration_minutes: null,
-    email_recipient: null,
-    email_subject: null,
-    email_body: null,
     notes: null,
     old_date: null,
     old_time: null,
@@ -99,14 +96,8 @@ function localParse(message, session = {}) {
     frequency: null, // Step 1.5: Recurrence pattern (e.g., "daily", "weekly", "3x per week")
   };
 
-  // Email recipient detection for send commands
-  const recipientMatch = raw.match(/(?:send email to|email)\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i);
-  if (recipientMatch) res.email_recipient = recipientMatch[1].toLowerCase();
-
   // Intent detection for personal productivity - enhanced delete/cancel recognition
-  if (/\b(send email|email|compose|draft)\b/.test(lower)) {
-    res.intent = "send_email";
-  } else if (/\b(set|create|add)\s+(?:a\s+)?goal\b/.test(lower)) {
+  if (/\b(set|create|add)\s+(?:a\s+)?goal\b/.test(lower)) {
     res.intent = "set_goal";
   } else if (/\b(what|show|list|view|display)\s+(are\s+)?(my\s+|the\s+)?goals?\b/i.test(lower)) {
     res.intent = "check_goals";
@@ -221,17 +212,6 @@ function localParse(message, session = {}) {
     }
   }
 
-  // Email content extraction
-  if (res.intent === "send_email") {
-    // Extract subject from patterns like "subject: xyz" or "re: xyz"
-    const subjectMatch = raw.match(/(?:subject:|re:)\s*([^,\n]+)/i);
-    if (subjectMatch) res.email_subject = subjectMatch[1].trim();
-
-    // Extract body from patterns like "saying xyz" or "message: xyz"
-    const bodyMatch = raw.match(/(?:saying|message:|telling them|body:)\s*["']?([^"'\n]+)["']?/i);
-    if (bodyMatch) res.email_body = bodyMatch[1].trim();
-  }
-
   // Handle confirmations - check for pending operations first
   const yn = detectYesNo(raw);
   const inProgressEvent = (session.activeEvents || []).find(e => e.preConfirmed && !e.confirmed) || null;
@@ -308,16 +288,13 @@ CURRENT CONTEXT:
 - Active events being created: ${JSON.stringify(activeEvents)}
 - Last event mentioned: ${JSON.stringify(lastEvent)}
 - Pending reschedule operation: ${JSON.stringify(rescheduleState)}
-- Pending email to send: ${JSON.stringify(session.pendingEmail || null)}
 - Has pending event confirmation: ${hasPendingEvent}
 - Has pending reschedule confirmation: ${hasPendingReschedule}
-- Has pending email confirmation: ${session.pendingEmail ? true : false}
 
 CORE CAPABILITIES:
 1. Calendar: create events, cancel events, reschedule events, check schedule
-2. Email: compose and send emails with recipients, subjects, and body
-3. Goals: set personal goals (study hours, exercise frequency, sleep targets, project deadlines)
-4. Context tracking: understand pronouns, partial info, multi-turn conversations
+2. Goals: set personal goals (study hours, exercise frequency, sleep targets, project deadlines)
+3. Context tracking: understand pronouns, partial info, multi-turn conversations
 
 GOAL TYPE CLASSIFICATION (Step 1.4):
 When extracting goal_type, use these keyword mappings:
@@ -379,21 +356,17 @@ B) TIME/DATE INTELLIGENCE:
 C) PARTIAL INFORMATION - Handle gracefully:
    - Title only → Ask for date/time in reply
    - Date/time only → Check if adding to existing event or ask for title
-   - Email recipient without body → Ask for message content
    - Cancel without title → Use lastEvent or ask which event
 
 D) INTENT DISAMBIGUATION:
-   - "meeting with john@example.com" → create_event (not send_email) with attendee
-   - "send meeting invite to john@example.com" → send_email with calendar details
    - "get rid of", "remove", "delete", "drop" → intent: "cancel"
    - "push", "shift", "bump", "move" → intent: "reschedule"
    - "what's happening", "free time", "schedule", "day look like" → intent: "check_schedule"
    - "I want to", "I need to", "goal to", "set a goal" → intent: "set_goal"
 
 E) CONFIRMATION PRIORITY (CRITICAL):
-   - If hasPendingEmail AND user says yes/no → intent: "send_email", confirmation_response
    - If hasPendingReschedule AND user says yes/no → intent: "reschedule", confirmation_response
-   - If hasPendingEvent (NOT reschedule, NOT email) AND user says yes/no → intent: "create_event", confirmation_response
+   - If hasPendingEvent (NOT reschedule) AND user says yes/no → intent: "create_event", confirmation_response
    - Simple "yes"/"no" without context → Ask what they're confirming in reply
    - Check what's actually pending in the session to route confirmation correctly
 
@@ -403,23 +376,18 @@ F) UNCLEAR/INSUFFICIENT INPUT:
    - Examples:
      * "cancel" alone → reply: "Which event would you like to cancel?"
      * "tomorrow" alone → reply: "What would you like to schedule tomorrow?"
-     * "send email" alone → reply: "Who would you like to send an email to?"
 
 G) MULTI-STEP CONVERSATIONS:
    - If user adds info to existing activeEvent → Keep same intent, add new fields
    - "6pm" after creating event → intent: "create_event", time: "18:00" (NOT reschedule)
-   - "add john@example.com" during event creation → Update attendee info
 
 OUTPUT SCHEMA (JSON only, no markdown):
 {
-  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "send_email" | "set_goal" | "check_goals" | "other",
+  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "set_goal" | "check_goals" | "other",
   "title": "string or null",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
   "duration_minutes": number or null,
-  "email_recipient": "email@example.com or null",
-  "email_subject": "string or null",
-  "email_body": "string or null",
   "notes": "string or null",
   "old_date": "YYYY-MM-DD or null",
   "old_time": "HH:MM or null",
@@ -471,61 +439,49 @@ Output: {"intent": "reschedule", "title": "team meeting", "date": "2025-10-10", 
 Input: "what's my day look like?"
 Output: {"intent": "check_schedule", "date": "${today}", "reply": null}
 
-10. SEND EMAIL - Complete:
-Input: "email john@example.com saying meeting confirmed for tomorrow"
-Output: {"intent": "send_email", "email_recipient": "john@example.com", "email_body": "meeting confirmed for tomorrow", "reply": null}
-
-11. SEND EMAIL - Partial:
-Input: "send email to sarah@work.com"
-Output: {"intent": "send_email", "email_recipient": "sarah@work.com", "reply": "What would you like to say to sarah@work.com?"}
-
-12. CONFIRMATION - Email:
-Input: "yes" (hasPendingEmail = true)
-Output: {"intent": "send_email", "confirmation_response": "yes", "reply": null}
-
-13. CONFIRMATION - Event creation:
-Input: "yes" (hasPendingEvent = true, hasPendingReschedule = false, hasPendingEmail = false)
+10. CONFIRMATION - Event creation:
+Input: "yes" (hasPendingEvent = true, hasPendingReschedule = false)
 Output: {"intent": "create_event", "confirmation_response": "yes", "reply": null}
 
-14. CONFIRMATION - Reschedule:
-Input: "yes" (hasPendingReschedule = true, hasPendingEmail = false)
+11. CONFIRMATION - Reschedule:
+Input: "yes" (hasPendingReschedule = true)
 Output: {"intent": "reschedule", "confirmation_response": "yes", "reply": null}
 
-14. UNCLEAR INPUT:
+12. UNCLEAR INPUT:
 Input: "tomorrow"
 Output: {"intent": "other", "reply": "What would you like to do tomorrow?"}
 
-15. TIME COLLOQUIALISMS:
+13. TIME COLLOQUIALISMS:
 Input: "schedule lunch meeting tomorrow afternoon"
 Output: {"intent": "create_event", "title": "lunch meeting", "date": "2025-10-06", "time": "14:00", "duration_minutes": 60, "reply": null}
 
-16. SET GOAL - Study with deadline (Step 1.5: with target & deadline):
+14. SET GOAL - Study with deadline (Step 1.5: with target & deadline):
 Input: "I want to study 10 hours before my exam"
 Output: {"intent": "set_goal", "goal_description": "study 10 hours before my exam", "goal_type": "study", "target_amount": 10, "target_unit": "hour", "deadline": null, "frequency": null, "reply": null}
 Note: No specific exam date given, so deadline is null
 
-17. SET GOAL - Exercise recurring (Step 1.5: with target & frequency):
+15. SET GOAL - Exercise recurring (Step 1.5: with target & frequency):
 Input: "Set a goal to go to the gym 3 times per week"
 Output: {"intent": "set_goal", "goal_description": "go to the gym 3 times per week", "goal_type": "exercise", "target_amount": 3, "target_unit": "time", "deadline": null, "frequency": "weekly", "reply": null}
 
-18. SET GOAL - Sleep daily (Step 1.5: with target & frequency):
+16. SET GOAL - Sleep daily (Step 1.5: with target & frequency):
 Input: "I need to sleep 7 hours every night"
 Output: {"intent": "set_goal", "goal_description": "sleep 7 hours every night", "goal_type": "sleep", "target_amount": 7, "target_unit": "hour", "deadline": null, "frequency": "daily", "reply": null}
 
-19. SET GOAL - Project deadline (Step 1.5: with deadline only):
+17. SET GOAL - Project deadline (Step 1.5: with deadline only):
 Input: "I need to finish my project by Friday"
-Output: {"intent": "set_goal", "goal_description": "finish my project by Friday", "goal_type": "project", "target_amount": null, "target_unit": null, "deadline": "2025-10-10", "frequency": null, "reply": null}
+Output: {"intent": "set_goal", "goal_description": "finish my project by Friday", "goal_type": "project", "target_amount": null, "target_unit": "null", "deadline": "2025-10-10", "frequency": null, "reply": null}
 
-20. SET GOAL - Natural phrasing (Step 1.5: with target):
+18. SET GOAL - Natural phrasing (Step 1.5: with target):
 Input: "My goal is to work out 4 times this week"
 Output: {"intent": "set_goal", "goal_description": "work out 4 times this week", "goal_type": "exercise", "target_amount": 4, "target_unit": "time", "deadline": "2025-10-12", "frequency": null, "reply": null}
 Note: "this week" = deadline is end of current week
 
-21. SET GOAL - Different verb (Step 1.5: with target):
+19. SET GOAL - Different verb (Step 1.5: with target):
 Input: "I'd like to read 2 books this month"
 Output: {"intent": "set_goal", "goal_description": "read 2 books this month", "goal_type": "study", "target_amount": 2, "target_unit": "book", "deadline": "2025-10-31", "frequency": null, "reply": null}
 
-22. DISAMBIGUATION - Goal vs Event:
+20. DISAMBIGUATION - Goal vs Event:
 Input: "I want to study tomorrow at 3pm"
 Output: {"intent": "create_event", "title": "study", "date": "2025-10-06", "time": "15:00", "duration_minutes": 60, "reply": null}
 Note: Specific date/time = event, not goal
@@ -672,7 +628,7 @@ CRITICAL REMINDERS:
     }
 
     // Normalize and validate intent
-    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "send_email", "set_goal", "check_goals", "other"];
+    const validIntents = ["create_event", "cancel", "reschedule", "check_schedule", "set_goal", "check_goals", "other"];
     if (!validIntents.includes(parsed.intent)) {
       console.warn(`Invalid intent "${parsed.intent}", defaulting to "other"`);
       parsed.intent = "other";
@@ -714,15 +670,6 @@ CRITICAL REMINDERS:
       }
     }
 
-    // Validate email format if present
-    if (parsed.email_recipient && typeof parsed.email_recipient === 'string') {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(parsed.email_recipient)) {
-        console.warn(`Invalid email format "${parsed.email_recipient}"`);
-        parsed.email_recipient = null;
-      }
-    }
-
     // Ensure confirmation_response is valid
     if (parsed.confirmation_response && !['yes', 'no'].includes(parsed.confirmation_response)) {
       console.warn(`Invalid confirmation_response "${parsed.confirmation_response}"`);
@@ -751,9 +698,6 @@ export async function intentHandler(message = "", session = {}, context = null) 
     date: null,
     time: null,
     duration_minutes: null,
-    email_recipient: null,
-    email_subject: null,
-    email_body: null,
     notes: null,
     old_date: null,
     old_time: null,

@@ -7,7 +7,6 @@ import { getAuthClient, saveToken } from "./utils/googleAuth.js";
 import { intentHandler } from "./services/intentHandler.js";
 // Database removed - using in-memory session storage
 import { v4 as uuidv4 } from "uuid";
-import { sendGmailEmail, draftGmailEmail } from "./services/gmailService.js";
 import { createCalendarEvent, updateCalendarEvent, deleteCalendarEvent, searchCalendarEvents, getEventsForDateRange } from "./services/calendarService.js";
 import { detectFreeTimeSlots } from "./services/freeTimeDetector.js"; // Phase 2, Step 2.3
 import path from "path";
@@ -113,11 +112,8 @@ app.post("/chat", async (req, res) => {
     if (isSimpleYesNo && !parsed.confirmation_response) {
       const confirmResponse = ['yes', 'y', 'yeah', 'yep'].includes(messageLower) ? 'yes' : 'no';
 
-      // Priority: email > reschedule > event creation
-      if (sessionState.pendingEmail) {
-        parsed.intent = "send_email";
-        parsed.confirmation_response = confirmResponse;
-      } else if (hasPendingReschedule) {
+      // Priority: reschedule > event creation
+      if (hasPendingReschedule) {
         parsed.intent = "reschedule";
         parsed.confirmation_response = confirmResponse;
       } else if (hasPendingEventConfirmation) {
@@ -148,79 +144,6 @@ app.post("/chat", async (req, res) => {
         parsed.intent = "create_event";
         // Don't clear the title - it will be merged with the existing event in create_event logic
       }
-    }
-
-    // Handle email sending intent
-    if (parsed.intent === "send_email") {
-      // Initialize pendingEmail in session if it doesn't exist
-      if (!sessionState.pendingEmail) {
-        sessionState.pendingEmail = null;
-      }
-
-      // Handle confirmation response
-      if (parsed.confirmation_response && sessionState.pendingEmail) {
-        if (parsed.confirmation_response === "yes") {
-          try {
-            // Send the confirmed email
-            const emailResult = await sendGmailEmail({
-              to: sessionState.pendingEmail.recipient,
-              subject: sessionState.pendingEmail.subject,
-              body: sessionState.pendingEmail.body
-            });
-
-            parsed.reply = `Email sent to ${sessionState.pendingEmail.recipient} successfully!`;
-            sessionState.pendingEmail = null; // Clear pending email
-            saveSession(sessionId, sessionState);
-            return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-
-          } catch (emailError) {
-            console.error("Email send failed:", emailError);
-            parsed.reply = `Failed to send email to ${sessionState.pendingEmail.recipient}. Please try again or check your Gmail authorization.`;
-            sessionState.pendingEmail = null;
-            saveSession(sessionId, sessionState);
-            return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-          }
-        } else {
-          // User said no - cancel email
-          const recipient = sessionState.pendingEmail.recipient;
-          parsed.reply = `Got it! I won't send the email to ${recipient}. Is there anything else I can help you with?`;
-          sessionState.pendingEmail = null;
-          saveSession(sessionId, sessionState);
-          return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-        }
-      }
-
-      // Collect email details
-      if (!parsed.email_recipient) {
-        parsed.reply = "Who would you like to send the email to? Please provide their email address.";
-        saveSession(sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-      }
-
-      if (!parsed.email_body && !parsed.email_subject) {
-        parsed.reply = `What would you like to say in the email to ${parsed.email_recipient}?`;
-        saveSession(sessionId, sessionState);
-        return res.json({ reply: parsed.reply, state: sessionState, sessionId });
-      }
-
-      // Store pending email and ask for confirmation
-      const subject = parsed.email_subject || "Message from AI Assistant";
-      const body = parsed.email_body || "Hello!";
-
-      sessionState.pendingEmail = {
-        recipient: parsed.email_recipient,
-        subject: subject,
-        body: body
-      };
-
-      let confirmMsg = `I'll send an email to **${parsed.email_recipient}**\n\n`;
-      confirmMsg += `**Subject:** ${subject}\n`;
-      confirmMsg += `**Message:**\n${body}\n\n`;
-      confirmMsg += `Would you like to send this email? (yes/no)`;
-
-      parsed.reply = confirmMsg;
-      saveSession(sessionId, sessionState);
-      return res.json({ reply: parsed.reply, state: sessionState, sessionId });
     }
 
     // Handle create event intent
@@ -868,7 +791,7 @@ app.post("/chat", async (req, res) => {
 
     // Default response
     else {
-      const reply = parsed.reply || "How can I help you today? I can help you create calendar events, send emails, and manage your schedule.";
+      const reply = parsed.reply || "How can I help you today? I can help you create calendar events and manage your schedule.";
       saveSession(sessionId, sessionState);
       return res.json({ reply, state: sessionState, sessionId });
     }
@@ -886,9 +809,7 @@ app.get("/auth", (req, res) => {
     access_type: "offline",
     prompt: "consent",
     scope: [
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/gmail.compose"
+      "https://www.googleapis.com/auth/calendar"
     ]
   });
   res.redirect(authUrl);
@@ -1114,7 +1035,18 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
     } else {
       // Regular recurring goal: "Learn French daily"
       sessionDuration = goal.target_amount || 1;
-      sessionsNeeded = result.eventCount;
+
+      // For daily goals with deadline, calculate from TODAY to deadline, not from first available slot
+      if (goal.frequency && (goal.frequency === 'daily' || goal.frequency === 'every day') && goal.deadline) {
+        const now = new Date();
+        const deadline = new Date(goal.deadline);
+        deadline.setHours(23, 59, 59, 999);
+        const daysUntilDeadline = Math.round((deadline - now) / (1000 * 60 * 60 * 24)) + 1;
+        sessionsNeeded = Math.max(1, daysUntilDeadline);
+      } else {
+        sessionsNeeded = result.eventCount;
+      }
+
       hoursNeeded = sessionsNeeded * sessionDuration;
     }
 
@@ -1125,18 +1057,18 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
     // 5. If incomplete, find alternative slots for missing sessions
     let alternatives = [];
     if (incomplete && result.timeOptions[0]) {
-      const foundDates = new Set(result.timeOptions[0].events.map(e => e.date));
       const missingSessions = sessionsNeeded - sessionsFound;
 
-      // Get all possible dates within deadline
+      // Get all possible dates within deadline (search ALL dates, not just missing ones)
+      // User might want multiple sessions per day, so we search everywhere
       const now = new Date();
       const deadline = goal.deadline ? new Date(goal.deadline) : new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000);
+      deadline.setHours(23, 59, 59, 999); // End of deadline day (inclusive)
+
       const allDates = [];
       for (let d = new Date(now); d <= deadline; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0];
-        if (!foundDates.has(dateStr)) {
-          allDates.push(dateStr);
-        }
+        allDates.push(dateStr);
       }
 
       // For each missing session, find alternative time slots
@@ -1144,6 +1076,7 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
       const durationMinutes = sessionDuration * 60;
 
       // Search all missing dates, not just first 3
+      console.log(`[DEBUG ALT] Searching ${allDates.length} dates for ${missingSessions} missing sessions (max ${missingSessions * 3} alternatives)`);
       for (const date of allDates) {
         if (alternatives.length >= missingSessions * 3) break; // Show up to 3 options per missing session
 
@@ -1158,6 +1091,7 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
           const freeBlocks = findFreeBlocks(date, prefName, prefTimes, durationMinutes, calendarEvents);
 
           if (freeBlocks.length > 0) {
+            console.log(`[DEBUG ALT] Found ${freeBlocks.length} free blocks on ${date} ${prefName}, adding up to 3`);
             // Add all free blocks for this preference on this date (up to 3)
             freeBlocks.slice(0, 3).forEach(slot => {
               alternatives.push({
@@ -1171,9 +1105,12 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
           }
         }
       }
+      console.log(`[DEBUG ALT] Total alternatives found: ${alternatives.length}`);
     }
 
     // 6. Return time options and goal with insufficiency info
+    console.log(`[DEBUG SERVER] Returning: incomplete=${incomplete}, sessionsNeeded=${sessionsNeeded}, sessionsFound=${sessionsFound}, timeOptions.length=${result.timeOptions.length}`);
+
     return res.json({
       timeOptions: result.timeOptions,
       eventCount: result.eventCount,

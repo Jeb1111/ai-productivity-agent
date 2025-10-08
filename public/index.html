@@ -1946,6 +1946,9 @@
         <button id="scheduleWithAlternativesBtn" class="find-time-confirm-btn" onclick="scheduleWithAlternatives()" style="width: 100%;">
           ✓ Schedule Selected Sessions
         </button>
+        <button id="schedulePartialBtn" class="not-now-btn" onclick="schedulePartialOnly()" style="width: 100%; background: #1a1a1a; color: white; border: 1px solid #444; display: none;">
+          ✓ Schedule Partial Anyway (Found Sessions Only)
+        </button>
         <button class="not-now-btn" onclick="adjustGoalSettings()" style="width: 100%;">
           🔧 Adjust Settings Instead
         </button>
@@ -2378,7 +2381,9 @@
       }
 
       // Check if goal needs scheduling (Phase 2, Step 2.3)
-      const needsScheduling = goal.target_amount && goal.target_unit;
+      // Show Find Time button if goal has target_amount OR has time preferences (including weekend-only)
+      const needsScheduling = (goal.target_amount && goal.target_unit) ||
+                              (goal.time_preferences && goal.time_preferences.length > 0);
       const findTimeButton = needsScheduling
         ? `<button class="find-time-btn" onclick="findTimeForGoal('${goal.id}')">📅 Find Time</button>`
         : '';
@@ -2953,11 +2958,13 @@
       document.getElementById('missingHours').textContent =
         `${data.missingSessions} sessions (${data.missingHours}h)`;
 
+      // Set global data BEFORE rendering (renderAlternativeSlots needs it)
+      window.incompleteScheduleData = data;
+      window.selectedAlternatives = [];
+
       // Render alternative slots
       renderAlternativeSlots(data.alternatives || [], data.missingSessions);
 
-      window.incompleteScheduleData = data;
-      window.selectedAlternatives = [];
       document.getElementById('incompleteModal').style.display = 'flex';
     }
 
@@ -2969,6 +2976,18 @@
     function renderAlternativeSlots(alternatives, missingSessions) {
       const container = document.getElementById('alternativeSlotsContainer');
       container.innerHTML = '';
+
+      // Store missingSessions globally for limit enforcement
+      window.maxAlternativeSelections = missingSessions;
+
+      // Control partial button visibility
+      const partialBtn = document.getElementById('schedulePartialBtn');
+      if (window.incompleteScheduleData.sessionsFound > 0) {
+        partialBtn.style.display = 'block';
+        partialBtn.textContent = `✓ Schedule ${window.incompleteScheduleData.sessionsFound} Sessions Anyway`;
+      } else {
+        partialBtn.style.display = 'none';
+      }
 
       if (alternatives.length === 0) {
         container.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No alternative slots available. Please adjust your goal settings.</p>';
@@ -3008,8 +3027,16 @@
           checkbox.type = 'checkbox';
           checkbox.value = JSON.stringify(alt);
           checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer;';
+          checkbox.className = 'alternative-checkbox';
           checkbox.onchange = (e) => {
             if (e.target.checked) {
+              // Check if limit reached
+              if (window.selectedAlternatives.length >= window.maxAlternativeSelections) {
+                e.target.checked = false;
+                showToast(`Maximum ${window.maxAlternativeSelections} slot${window.maxAlternativeSelections !== 1 ? 's' : ''} can be selected`);
+                return;
+              }
+
               window.selectedAlternatives.push(JSON.parse(e.target.value));
               slotDiv.style.borderColor = '#4a9eff';
               slotDiv.style.background = 'rgba(74, 158, 255, 0.05)';
@@ -3022,6 +3049,7 @@
               slotDiv.style.background = '#0d0d0d';
             }
             updateScheduleButton();
+            updateCheckboxStates();
           };
 
           const slotInfo = document.createElement('div');
@@ -3056,6 +3084,42 @@
         btn.textContent = `✓ Schedule ${window.incompleteScheduleData.sessionsFound + count} Sessions Total`;
       } else {
         btn.textContent = '✓ Schedule Selected Sessions';
+      }
+    }
+
+    /**
+     * Update checkbox states based on selection limit
+     */
+    function updateCheckboxStates() {
+      const checkboxes = document.querySelectorAll('.alternative-checkbox');
+      const limitReached = window.selectedAlternatives.length >= window.maxAlternativeSelections;
+
+      checkboxes.forEach(cb => {
+        if (!cb.checked) {
+          cb.disabled = limitReached;
+          const parent = cb.parentElement;
+          if (limitReached) {
+            parent.style.opacity = '0.5';
+            parent.style.cursor = 'not-allowed';
+          } else {
+            parent.style.opacity = '1';
+            parent.style.cursor = 'pointer';
+          }
+        }
+      });
+
+      // Update message
+      const msg = document.getElementById('selectMessage');
+      if (msg) {
+        const selected = window.selectedAlternatives.length;
+        const max = window.maxAlternativeSelections;
+        if (selected >= max) {
+          msg.textContent = `${max} slot${max !== 1 ? 's' : ''} selected (maximum reached)`;
+          msg.style.color = '#ff9800';
+        } else {
+          msg.textContent = `Select up to ${max} slot${max !== 1 ? 's' : ''} to complete your schedule (${selected} selected)`;
+          msg.style.color = '#4a9eff';
+        }
       }
     }
 
@@ -3122,6 +3186,48 @@
           showToast(`⚠ ${result.created} scheduled, ${result.failed} failed. Check console for details.`);
         }
 
+      } catch (error) {
+        console.error('Error scheduling events:', error);
+        showToast('Failed to schedule events. Please try again.');
+      }
+    }
+
+    /**
+     * Schedule only the found sessions (partial schedule without alternatives)
+     */
+    async function schedulePartialOnly() {
+      const data = window.incompleteScheduleData;
+
+      if (!data.timeOptions[0] || data.timeOptions[0].events.length === 0) {
+        showToast('No sessions to schedule');
+        return;
+      }
+
+      const events = data.timeOptions[0].events;
+
+      closeIncompleteModal();
+      showToast(`Scheduling ${events.length} sessions...`);
+
+      try {
+        const response = await fetch(`/api/goals/${data.goal.id}/schedule-recurring`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            events: events
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to schedule events');
+        }
+
+        const result = await response.json();
+        await loadUpcomingEvents();
+
+        if (result.success) {
+          showToast(`✓ ${result.created} session${result.created !== 1 ? 's' : ''} scheduled (${data.missingSessions} sessions skipped)`);
+        }
       } catch (error) {
         console.error('Error scheduling events:', error);
         showToast('Failed to schedule events. Please try again.');
