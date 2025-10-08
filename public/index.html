@@ -978,6 +978,76 @@
       user-select: none;
     }
 
+    /* Distribution Strategy Options (Option 3) */
+    .distribution-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+
+    .distribution-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px;
+      background: #0d0d0d;
+      border: 2px solid #333;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .distribution-option:hover {
+      background: #1a1a1a;
+      border-color: #555;
+    }
+
+    .distribution-option input[type="radio"] {
+      margin-top: 4px;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .distribution-option input[type="radio"]:checked + .option-content {
+      color: white;
+    }
+
+    .distribution-option:has(input[type="radio"]:checked) {
+      border-color: #4a9eff;
+      background: rgba(74, 158, 255, 0.05);
+    }
+
+    .option-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: #ccc;
+      transition: color 0.2s;
+    }
+
+    .option-icon {
+      font-size: 18px;
+      margin-right: 8px;
+    }
+
+    .option-text {
+      font-weight: 500;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+    }
+
+    .option-content small {
+      color: #666;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
     .form-actions {
       display: flex;
       gap: 12px;
@@ -1708,6 +1778,56 @@
         <label class="form-label">Deadline (optional):</label>
         <input type="date" id="goalDeadline" class="form-input">
 
+        <!-- Multi-Session Settings (Option 3) -->
+        <div id="multiSessionSettings" style="display: none; margin-top: 20px; padding-top: 20px; border-top: 1px solid #333;">
+          <h3 style="color: #ccc; font-size: 14px; margin-bottom: 16px;">📅 Session Settings</h3>
+
+          <div class="form-row">
+            <div class="form-col">
+              <label class="form-label">Session Duration (hours):</label>
+              <input type="number" id="goalSessionDuration" class="form-input" placeholder="e.g., 2" min="0.5" step="0.5" value="2">
+              <small style="color: #666; font-size: 11px;">How long each session should be</small>
+            </div>
+            <div class="form-col">
+              <label class="form-label">Max Sessions Per Day:</label>
+              <input type="number" id="goalMaxSessionsPerDay" class="form-input" placeholder="1-10" min="1" max="10" value="1">
+              <small style="color: #666; font-size: 11px;">Maximum sessions in one day</small>
+            </div>
+          </div>
+
+          <label class="form-label">Distribution Strategy:</label>
+          <div class="distribution-options">
+            <label class="distribution-option">
+              <input type="radio" name="distribution" value="spread_evenly" checked>
+              <div class="option-content">
+                <span class="option-icon">📅</span>
+                <span class="option-text">Spread Evenly</span>
+                <small>Minimize sessions per day, maximize days used</small>
+              </div>
+            </label>
+            <label class="distribution-option">
+              <input type="radio" name="distribution" value="finish_quickly">
+              <div class="option-content">
+                <span class="option-icon">⚡</span>
+                <span class="option-text">Finish Quickly</span>
+                <small>Pack sessions close together to finish sooner</small>
+              </div>
+            </label>
+            <label class="distribution-option">
+              <input type="radio" name="distribution" value="weekend_focused">
+              <div class="option-content">
+                <span class="option-icon">🏖️</span>
+                <span class="option-text">Weekend Focused</span>
+                <small>Prioritize Saturday and Sunday</small>
+              </div>
+            </label>
+          </div>
+
+          <div id="sessionPreview" style="margin-top: 12px; padding: 12px; background: #0d0d0d; border: 1px solid #333; border-radius: 8px;">
+            <small style="color: #999;">💡 <span id="sessionPreviewText">Enter target amount to see session breakdown</span></small>
+          </div>
+        </div>
+
         <div class="form-actions">
           <button class="cancel-btn" onclick="closeGoalForm()">Cancel</button>
           <button id="saveGoalBtn" class="save-btn" onclick="saveGoal()">Save Goal ✓</button>
@@ -1785,6 +1905,52 @@
         </button>
         <button class="find-time-confirm-btn" onclick="confirmFindTime()">
           Yes, Find Time ✓
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incomplete Schedule Warning Modal (Simple Solution) -->
+  <div id="incompleteModal" class="modal" style="display: none;">
+    <div class="confirmation-container">
+      <div class="confirmation-content">
+        <div class="warning-icon" style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+        <h2 class="confirmation-title" style="color: #ff9800;">Incomplete Schedule</h2>
+
+        <p id="incompleteGoalDesc" style="color: #ccc; margin-bottom: 20px;"></p>
+
+        <div class="incomplete-stats" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 20px 0; padding: 16px; background: #0d0d0d; border-radius: 8px;">
+          <div class="stat-item">
+            <div style="color: #666; font-size: 11px; margin-bottom: 4px;">TARGET</div>
+            <div id="targetHours" style="color: white; font-weight: 600; font-size: 16px;"></div>
+          </div>
+          <div class="stat-item">
+            <div style="color: #666; font-size: 11px; margin-bottom: 4px;">FOUND</div>
+            <div id="foundHours" style="color: #4CAF50; font-weight: 600; font-size: 16px;"></div>
+          </div>
+          <div class="stat-item">
+            <div style="color: #666; font-size: 11px; margin-bottom: 4px;">MISSING</div>
+            <div id="missingHours" style="color: #ff9800; font-weight: 600; font-size: 16px;"></div>
+          </div>
+        </div>
+
+        <p style="color: #aaa; font-size: 14px; margin-bottom: 12px;">Select alternative times for the missing sessions:</p>
+
+        <!-- Alternative Slots Selection -->
+        <div id="alternativeSlotsContainer" style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+          <!-- Alternative slots will be rendered here -->
+        </div>
+      </div>
+
+      <div class="confirmation-buttons" style="flex-direction: column; gap: 10px;">
+        <button id="scheduleWithAlternativesBtn" class="find-time-confirm-btn" onclick="scheduleWithAlternatives()" style="width: 100%;">
+          ✓ Schedule Selected Sessions
+        </button>
+        <button class="not-now-btn" onclick="adjustGoalSettings()" style="width: 100%;">
+          🔧 Adjust Settings Instead
+        </button>
+        <button class="not-now-btn" onclick="closeIncompleteModal()" style="width: 100%;">
+          ❌ Cancel
         </button>
       </div>
     </div>
@@ -2281,10 +2447,49 @@
         // Show fields section
         document.getElementById('nlInputSection').style.display = 'none';
         document.getElementById('goalFieldsSection').style.display = 'block';
+
+        // Toggle multi-session settings visibility
+        toggleMultiSessionSettings();
       } catch (error) {
         console.error('Error parsing goal:', error);
         alert('Failed to parse goal. Please try again.');
       }
+    }
+
+    // Toggle multi-session settings visibility based on target_amount
+    function toggleMultiSessionSettings() {
+      const targetAmount = parseFloat(document.getElementById('goalTargetAmount').value) || 0;
+      const targetUnit = document.getElementById('goalTargetUnit').value.trim().toLowerCase();
+      const multiSessionDiv = document.getElementById('multiSessionSettings');
+
+      // Show multi-session settings if target_amount > 2 hours (or similar time-based goal)
+      const isTimeBasedGoal = targetUnit.includes('hour') || targetUnit.includes('hr');
+      const showSettings = targetAmount > 2 && isTimeBasedGoal;
+
+      multiSessionDiv.style.display = showSettings ? 'block' : 'none';
+
+      // Update session preview
+      if (showSettings) {
+        updateSessionPreview();
+      }
+    }
+
+    // Update session preview text
+    function updateSessionPreview() {
+      const targetAmount = parseFloat(document.getElementById('goalTargetAmount').value) || 0;
+      const sessionDuration = parseFloat(document.getElementById('goalSessionDuration').value) || 2;
+      const maxSessionsPerDay = parseInt(document.getElementById('goalMaxSessionsPerDay').value) || 1;
+
+      if (targetAmount <= 0 || sessionDuration <= 0) {
+        document.getElementById('sessionPreviewText').textContent = 'Enter target amount to see session breakdown';
+        return;
+      }
+
+      const totalSessions = Math.ceil(targetAmount / sessionDuration);
+      const minDays = Math.ceil(totalSessions / maxSessionsPerDay);
+
+      document.getElementById('sessionPreviewText').textContent =
+        `This will create approximately ${totalSessions} sessions of ${sessionDuration}h each, spread across at least ${minDays} days`;
     }
 
     async function saveGoal() {
@@ -2292,14 +2497,21 @@
       const timePreferences = Array.from(document.querySelectorAll('.time-pref-checkbox:checked'))
         .map(checkbox => checkbox.value);
 
+      // Get distribution strategy
+      const distributionRadio = document.querySelector('input[name="distribution"]:checked');
+      const distribution = distributionRadio ? distributionRadio.value : 'spread_evenly';
+
       const goalData = {
         description: document.getElementById('goalDescription').value.trim(),
         type: document.getElementById('goalType').value,
-        target_amount: parseInt(document.getElementById('goalTargetAmount').value) || null,
+        target_amount: parseFloat(document.getElementById('goalTargetAmount').value) || null,
         target_unit: document.getElementById('goalTargetUnit').value.trim() || null,
         frequency: document.getElementById('goalFrequency').value || null,
         deadline: document.getElementById('goalDeadline').value || null,
-        time_preferences: timePreferences // Phase 2, Step 2.1
+        time_preferences: timePreferences, // Phase 2, Step 2.1
+        session_duration: parseFloat(document.getElementById('goalSessionDuration').value) || null, // Option 3
+        max_sessions_per_day: parseInt(document.getElementById('goalMaxSessionsPerDay').value) || 1, // Option 3
+        distribution_strategy: distribution // Option 3
       };
 
       if (!goalData.description) {
@@ -2478,11 +2690,17 @@
         }
 
         const data = await response.json();
-        // data = { timeOptions: [...], eventCount: N, frequency: 'daily', goal: {...} }
+        // data = { timeOptions: [...], eventCount: N, frequency: 'daily', goal: {...}, incomplete: true/false, ... }
 
         // Check if any time options were found
         if (!data.timeOptions || data.timeOptions.length === 0) {
           showToast('No available time slots found. Try adjusting your preferences.');
+          return;
+        }
+
+        // Simple Solution: Check if incomplete schedule
+        if (data.incomplete) {
+          showIncompleteModal(data);
           return;
         }
 
@@ -2587,19 +2805,39 @@
     /**
      * Update event dates preview section
      * @param {Array} events - Array of event objects
+     * Option 3: Group multi-session days together
      */
     function updateEventPreview(events) {
       const preview = document.getElementById('eventDatesPreview');
       preview.innerHTML = '';
 
+      // Group events by date
+      const eventsByDate = {};
       events.forEach(event => {
+        if (!eventsByDate[event.date]) {
+          eventsByDate[event.date] = [];
+        }
+        eventsByDate[event.date].push(event);
+      });
+
+      // Render each date group
+      Object.keys(eventsByDate).sort().forEach(date => {
+        const dayEvents = eventsByDate[date];
         const badge = document.createElement('div');
         badge.className = 'date-badge';
 
-        const dateLabel = formatSlotDate(event.date);
-        const timeLabel = formatSlotTime(event.startTime, event.endTime);
+        const dateLabel = formatSlotDate(date);
 
-        badge.textContent = `${dateLabel} • ${timeLabel}`;
+        if (dayEvents.length === 1) {
+          // Single session on this day
+          const timeLabel = formatSlotTime(dayEvents[0].startTime, dayEvents[0].endTime);
+          badge.textContent = `${dateLabel} • ${timeLabel}`;
+        } else {
+          // Multiple sessions on this day
+          const timesLabel = dayEvents.map(e => formatSlotTime(e.startTime, e.endTime)).join(', ');
+          badge.innerHTML = `<strong>${dateLabel}</strong> • ${dayEvents.length} sessions: ${timesLabel}`;
+        }
+
         preview.appendChild(badge);
       });
     }
@@ -2699,6 +2937,212 @@
     }
 
     /**
+     * Show incomplete schedule modal (Simple Solution)
+     * @param {Object} data - Response from /api/goals/:goalId/find-slots
+     */
+    function showIncompleteModal(data) {
+      document.getElementById('incompleteGoalDesc').textContent =
+        `Goal: ${data.goal.description}`;
+
+      document.getElementById('targetHours').textContent =
+        `${data.sessionsNeeded} sessions (${data.hoursNeeded}h)`;
+
+      document.getElementById('foundHours').textContent =
+        `${data.sessionsFound} sessions (${data.hoursFound}h)`;
+
+      document.getElementById('missingHours').textContent =
+        `${data.missingSessions} sessions (${data.missingHours}h)`;
+
+      // Render alternative slots
+      renderAlternativeSlots(data.alternatives || [], data.missingSessions);
+
+      window.incompleteScheduleData = data;
+      window.selectedAlternatives = [];
+      document.getElementById('incompleteModal').style.display = 'flex';
+    }
+
+    /**
+     * Render alternative time slots for missing sessions
+     * @param {Array} alternatives - Array of alternative slot objects
+     * @param {number} missingSessions - Number of missing sessions
+     */
+    function renderAlternativeSlots(alternatives, missingSessions) {
+      const container = document.getElementById('alternativeSlotsContainer');
+      container.innerHTML = '';
+
+      if (alternatives.length === 0) {
+        container.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No alternative slots available. Please adjust your goal settings.</p>';
+        document.getElementById('scheduleWithAlternativesBtn').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('scheduleWithAlternativesBtn').style.display = 'block';
+
+      // Group alternatives by date
+      const byDate = {};
+      alternatives.forEach(alt => {
+        if (!byDate[alt.date]) {
+          byDate[alt.date] = [];
+        }
+        byDate[alt.date].push(alt);
+      });
+
+      // Render each date group
+      Object.keys(byDate).sort().forEach((date, dateIndex) => {
+        const dayAlts = byDate[date];
+
+        const dateHeader = document.createElement('div');
+        dateHeader.style.cssText = 'color: #aaa; font-size: 12px; margin: 16px 0 8px 0; font-weight: 500;';
+        dateHeader.textContent = formatSlotDate(date);
+        container.appendChild(dateHeader);
+
+        dayAlts.forEach((alt, altIndex) => {
+          const slotDiv = document.createElement('label');
+          slotDiv.style.cssText = 'display: flex; align-items: center; gap: 12px; padding: 12px; background: #0d0d0d; border: 1px solid #333; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.2s;';
+          slotDiv.onmouseenter = () => slotDiv.style.borderColor = '#555';
+          slotDiv.onmouseleave = () => {
+            if (!slotDiv.querySelector('input').checked) slotDiv.style.borderColor = '#333';
+          };
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = JSON.stringify(alt);
+          checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer;';
+          checkbox.onchange = (e) => {
+            if (e.target.checked) {
+              window.selectedAlternatives.push(JSON.parse(e.target.value));
+              slotDiv.style.borderColor = '#4a9eff';
+              slotDiv.style.background = 'rgba(74, 158, 255, 0.05)';
+            } else {
+              const altData = JSON.parse(e.target.value);
+              window.selectedAlternatives = window.selectedAlternatives.filter(
+                s => !(s.date === altData.date && s.startTime === altData.startTime)
+              );
+              slotDiv.style.borderColor = '#333';
+              slotDiv.style.background = '#0d0d0d';
+            }
+            updateScheduleButton();
+          };
+
+          const slotInfo = document.createElement('div');
+          slotInfo.style.cssText = 'flex: 1;';
+          slotInfo.innerHTML = `
+            <div style="color: white; font-size: 14px; font-weight: 500;">
+              ${formatSlotTime(alt.startTime, alt.endTime)}
+            </div>
+            <div style="color: #666; font-size: 12px;">
+              ${alt.timePreference.charAt(0).toUpperCase() + alt.timePreference.slice(1)}
+            </div>
+          `;
+
+          slotDiv.appendChild(checkbox);
+          slotDiv.appendChild(slotInfo);
+          container.appendChild(slotDiv);
+        });
+      });
+
+      // Show message about how many to select
+      const selectMsg = document.createElement('p');
+      selectMsg.id = 'selectMessage';
+      selectMsg.style.cssText = 'color: #4a9eff; font-size: 12px; margin-top: 12px; text-align: center;';
+      selectMsg.textContent = `Select up to ${missingSessions} slot${missingSessions !== 1 ? 's' : ''} to complete your schedule`;
+      container.appendChild(selectMsg);
+    }
+
+    function updateScheduleButton() {
+      const btn = document.getElementById('scheduleWithAlternativesBtn');
+      const count = window.selectedAlternatives.length;
+      if (count > 0) {
+        btn.textContent = `✓ Schedule ${window.incompleteScheduleData.sessionsFound + count} Sessions Total`;
+      } else {
+        btn.textContent = '✓ Schedule Selected Sessions';
+      }
+    }
+
+    /**
+     * Close incomplete modal
+     */
+    function closeIncompleteModal() {
+      document.getElementById('incompleteModal').style.display = 'none';
+      window.incompleteScheduleData = null;
+    }
+
+    /**
+     * Adjust goal settings (re-open goal form)
+     */
+    function adjustGoalSettings() {
+      closeIncompleteModal();
+      const goalId = window.incompleteScheduleData.goal.id;
+      // Re-open goal form with current goal pre-filled
+      editGoal(goalId);
+    }
+
+    /**
+     * Schedule with selected alternative slots
+     */
+    async function scheduleWithAlternatives() {
+      const data = window.incompleteScheduleData;
+      const alternatives = window.selectedAlternatives;
+
+      if (alternatives.length === 0) {
+        showToast('Please select at least one alternative slot');
+        return;
+      }
+
+      // Combine found events with selected alternatives
+      const allEvents = [...data.timeOptions[0].events, ...alternatives];
+
+      closeIncompleteModal();
+      showToast(`Scheduling ${allEvents.length} sessions...`);
+
+      // Call scheduling endpoint directly
+      try {
+        const response = await fetch(`/api/goals/${data.goal.id}/schedule-recurring`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: sessionId,
+            events: allEvents
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to schedule events');
+        }
+
+        const result = await response.json();
+
+        // Refresh events sidebar
+        await loadUpcomingEvents();
+
+        // Show success message
+        if (result.success) {
+          showToast(`✓ ${result.created} session${result.created !== 1 ? 's' : ''} scheduled successfully!`);
+        } else {
+          showToast(`⚠ ${result.created} scheduled, ${result.failed} failed. Check console for details.`);
+        }
+
+      } catch (error) {
+        console.error('Error scheduling events:', error);
+        showToast('Failed to schedule events. Please try again.');
+      }
+    }
+
+    /**
+     * Proceed with partial schedule (old function - kept for backwards compat)
+     */
+    function schedulePartial() {
+      const data = window.incompleteScheduleData;
+      closeIncompleteModal();
+
+      // Show warning toast
+      showToast(`⚠️ Scheduling ${data.hoursFound} of ${data.hoursNeeded} hours`);
+
+      // Proceed to normal slot preview
+      openSlotPreviewModal(data);
+    }
+
+    /**
      * Schedule selected time option as calendar events
      */
     async function scheduleSelectedSlots() {
@@ -2771,6 +3215,12 @@
       if (e.target === this) closeGoalForm();
     });
 
+    // Event listeners for multi-session settings (Option 3)
+    document.getElementById('goalTargetAmount').addEventListener('input', toggleMultiSessionSettings);
+    document.getElementById('goalTargetUnit').addEventListener('input', toggleMultiSessionSettings);
+    document.getElementById('goalSessionDuration').addEventListener('input', updateSessionPreview);
+    document.getElementById('goalMaxSessionsPerDay').addEventListener('input', updateSessionPreview);
+
     document.getElementById('deleteGoalModal').addEventListener('click', function(e) {
       if (e.target === this) closeDeleteConfirm();
     });
@@ -2781,6 +3231,10 @@
 
     document.getElementById('goalSavedConfirmModal').addEventListener('click', function(e) {
       if (e.target === this) closeGoalSavedConfirm();
+    });
+
+    document.getElementById('incompleteModal').addEventListener('click', function(e) {
+      if (e.target === this) closeIncompleteModal();
     });
   </script>
 </body>

@@ -1102,12 +1102,92 @@ app.post("/api/goals/:goalId/find-slots", async (req, res) => {
       daysAhead: 28
     });
 
-    // 4. Return time options and goal
+    // 4. Calculate insufficiency info (Simple Solution for incomplete schedules)
+    let sessionsNeeded, hoursNeeded, sessionDuration;
+
+    if (goal.session_duration && goal.target_amount) {
+      // Multi-session goal: "Study 10 hours in 2-hour sessions"
+      sessionDuration = goal.session_duration;
+      const targetAmount = goal.target_amount;
+      sessionsNeeded = Math.ceil(targetAmount / sessionDuration);
+      hoursNeeded = sessionsNeeded * sessionDuration;
+    } else {
+      // Regular recurring goal: "Learn French daily"
+      sessionDuration = goal.target_amount || 1;
+      sessionsNeeded = result.eventCount;
+      hoursNeeded = sessionsNeeded * sessionDuration;
+    }
+
+    const sessionsFound = result.timeOptions[0]?.events.length || 0;
+    const hoursFound = sessionsFound * sessionDuration;
+    const incomplete = sessionsFound < sessionsNeeded && sessionsNeeded > 0;
+
+    // 5. If incomplete, find alternative slots for missing sessions
+    let alternatives = [];
+    if (incomplete && result.timeOptions[0]) {
+      const foundDates = new Set(result.timeOptions[0].events.map(e => e.date));
+      const missingSessions = sessionsNeeded - sessionsFound;
+
+      // Get all possible dates within deadline
+      const now = new Date();
+      const deadline = goal.deadline ? new Date(goal.deadline) : new Date(now.getTime() + 28 * 24 * 60 * 60 * 1000);
+      const allDates = [];
+      for (let d = new Date(now); d <= deadline; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0];
+        if (!foundDates.has(dateStr)) {
+          allDates.push(dateStr);
+        }
+      }
+
+      // For each missing session, find alternative time slots
+      const { findFreeBlocks } = await import('./services/freeTimeDetector.js');
+      const durationMinutes = sessionDuration * 60;
+
+      // Search all missing dates, not just first 3
+      for (const date of allDates) {
+        if (alternatives.length >= missingSessions * 3) break; // Show up to 3 options per missing session
+
+        // Find slots in all time preferences for this date
+        const timeSlots = {
+          morning: { start: '06:00', end: '12:00' },
+          afternoon: { start: '12:00', end: '18:00' },
+          evening: { start: '18:00', end: '22:00' }
+        };
+
+        for (const [prefName, prefTimes] of Object.entries(timeSlots)) {
+          const freeBlocks = findFreeBlocks(date, prefName, prefTimes, durationMinutes, calendarEvents);
+
+          if (freeBlocks.length > 0) {
+            // Add all free blocks for this preference on this date (up to 3)
+            freeBlocks.slice(0, 3).forEach(slot => {
+              alternatives.push({
+                date: slot.date,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                durationMinutes: slot.durationMinutes,
+                timePreference: prefName
+              });
+            });
+          }
+        }
+      }
+    }
+
+    // 6. Return time options and goal with insufficiency info
     return res.json({
       timeOptions: result.timeOptions,
       eventCount: result.eventCount,
       frequency: result.frequency,
-      goal
+      goal,
+      // Insufficiency detection
+      incomplete,
+      sessionsNeeded,
+      sessionsFound,
+      hoursNeeded,
+      hoursFound,
+      missingHours: hoursNeeded - hoursFound,
+      missingSessions: sessionsNeeded - sessionsFound,
+      alternatives  // Alternative slots for missing sessions
     });
 
   } catch (error) {
@@ -1142,7 +1222,72 @@ app.post("/api/goals/:goalId/schedule-recurring", async (req, res) => {
     const auth = getAuthClient();
     const calendar = google.calendar({ version: 'v3', auth });
 
-    // 3. Build recurrence rule (RRULE) based on goal frequency and deadline
+    // 3. Check if we have multi-session days (Option 3)
+    // If multiple sessions per day, create individual events instead of RRULE
+    const eventsByDate = {};
+    events.forEach(event => {
+      if (!eventsByDate[event.date]) {
+        eventsByDate[event.date] = [];
+      }
+      eventsByDate[event.date].push(event);
+    });
+
+    const hasMultiSessionDays = Object.values(eventsByDate).some(dayEvents => dayEvents.length > 1);
+    const useIndividualEvents = hasMultiSessionDays || (goal.max_sessions_per_day && goal.max_sessions_per_day > 1);
+
+    // If multi-session pattern detected, create individual events
+    if (useIndividualEvents) {
+      const results = [];
+      let sessionCounter = 1;
+      const totalSessions = events.length;
+
+      for (const event of events) {
+        try {
+          const startDT = new Date(`${event.date}T${event.startTime}:00`);
+          const endDT = new Date(`${event.date}T${event.endTime}:00`);
+
+          const eventResource = {
+            summary: goal.description,
+            description: `Goal: ${goal.description}\nSession ${sessionCounter} of ${totalSessions}\nTarget: ${goal.target_amount} ${goal.target_unit}`,
+            start: {
+              dateTime: startDT.toISOString(),
+              timeZone: 'Australia/Sydney'
+            },
+            end: {
+              dateTime: endDT.toISOString(),
+              timeZone: 'Australia/Sydney'
+            },
+            reminders: {
+              useDefault: false,
+              overrides: [{ method: 'popup', minutes: 30 }]
+            }
+          };
+
+          await calendar.events.insert({
+            calendarId: 'primary',
+            resource: eventResource,
+            sendUpdates: 'none'
+          });
+
+          results.push({ success: true, date: event.date });
+          sessionCounter++;
+        } catch (error) {
+          console.error(`Error creating event for ${event.date}:`, error);
+          results.push({ success: false, date: event.date, error: error.message });
+        }
+      }
+
+      return res.json({
+        success: true,
+        created: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        recurring: false,
+        multiSession: true,
+        results
+      });
+    }
+
+    // 4. Build recurrence rule (RRULE) for simple recurring patterns
     const firstEvent = events[0];
     const startDateTime = new Date(`${firstEvent.date}T${firstEvent.startTime}:00`);
     const endDateTime = new Date(`${firstEvent.date}T${firstEvent.endTime}:00`);

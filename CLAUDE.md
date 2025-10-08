@@ -20,6 +20,7 @@ This is a Node.js/Express AI productivity agent that handles calendar appointmen
 - `server/services/intentHandler.js` - NLP service using OpenAI + fallback local parsing
 - `server/services/gmailService.js` - Gmail API integration for sending emails
 - `server/services/calendarService.js` - Google Calendar API integration
+- `server/services/freeTimeDetector.js` - Calendar availability analysis and recurring event slot detection
 - `server/utils/googleAuth.js` - Google OAuth 2.0 authentication utilities
 - `public/index.html` - Frontend chat interface
 
@@ -39,7 +40,13 @@ Two-tier intent recognition:
 1. **OpenAI GPT-4o-mini** (primary) - Structured JSON extraction for complex queries
 2. **Local regex parser** (fallback) - Rule-based parsing when OpenAI unavailable
 
-Supported intents: `create_event`, `cancel`, `reschedule`, `check_schedule`, `send_email`, `set_goal`, `other`
+Supported intents: `create_event`, `cancel`, `reschedule`, `check_schedule`, `send_email`, `set_goal`, `redirect_to_goals`, `other`
+
+**Chat Restrictions:**
+- Main chat redirects ALL goal management requests (create/update/delete/read) to Goals section
+- Chat maintains ability to modify calendar events created by goals
+- Pattern matching detects goal-related keywords and returns friendly redirect message
+- Ambiguous requests treated as calendar events with confirmation flow
 
 ### Google Services Integration
 
@@ -78,6 +85,18 @@ Required `.env` variables:
 - Separate chat area specifically for goal management
 - Context-aware processing (sends `context: 'goal_management'` to backend)
 - Examples shown: study hours, workout frequency, sleep targets, project deadlines
+- Goal saved confirmation modal prompts user to find time or skip scheduling
+- Smart recurring event scheduling with radio button time slot selection
+
+**Recurring Event Scheduling:**
+- Analyzes calendar availability in 30-minute increments across 4 weeks
+- Returns ONE optimal slot per day per time preference (morning/afternoon/evening)
+- Pre-selects first available slot matching user's time preference
+- Shows 3 radio button alternatives for user selection
+- Creates single Google Calendar recurring event using RRULE
+- Hybrid strategy: goals >4 weeks use UNTIL date, ≤4 weeks use COUNT
+- Deadline dates are inclusive (scheduled through end of deadline day)
+- Supports daily, weekly, 3x/week, 2x/week patterns
 
 **Event Management:**
 - Event detail modal with view/edit modes
@@ -85,26 +104,38 @@ Required `.env` variables:
 - Delete confirmation dialog
 - Real-time event refresh after modifications
 
-### Goals Functionality (Partial Implementation)
+### Goals Functionality
 
 **Current Status:**
-- ✅ Intent detection for `set_goal`
+- ✅ Intent detection for `set_goal` and `redirect_to_goals`
 - ✅ Goal description extraction via NLP
 - ✅ Context-aware goal vs. event disambiguation
-- ⚠️ **NOT IMPLEMENTED**: Goal storage, tracking, progress updates, or retrieval
+- ✅ In-memory goal storage with structured data (target amount, unit, frequency, deadline, time preference)
+- ✅ Smart recurring event scheduling using Google Calendar RRULE
+- ✅ Goal saved confirmation modal workflow
+- ⚠️ **NOT IMPLEMENTED**: Goal progress tracking, completion updates, or persistent storage (database)
 
 **How It Works:**
 1. User opens goals modal (sends `context: 'goal_management'`)
-2. Intent handler biases toward `set_goal` intent
-3. System extracts `goal_description` field
-4. Server acknowledges goal but **does not persist it**
-5. No database storage or tracking mechanism exists yet
+2. Intent handler extracts structured goal data (target, frequency, deadline, time preference)
+3. Goal saved to in-memory session storage
+4. User prompted with confirmation modal: "Want me to find time for this goal?"
+5. If confirmed, system analyzes calendar and finds available time slots
+6. User selects from 3 time preference options (morning/afternoon/evening)
+7. Single recurring Google Calendar event created with RRULE
 
 **Example Goal Patterns:**
 - "I want to study 10 hours before my exam" → goal with deadline
 - "Set a goal to workout 3 times per week" → recurring goal
 - "I need to sleep 7 hours every night" → daily target goal
 - "I want to finish my project by next Monday" → project deadline
+
+**Scheduling Algorithm:**
+- Uses `freeTimeDetector.js` to analyze calendar availability
+- Searches 4 weeks ahead (or until deadline if sooner)
+- Returns ONE slot per day per time preference to avoid overlaps
+- Calculates event count based on frequency and deadline
+- Time preferences: Morning (6am-12pm), Afternoon (12pm-6pm), Evening (6pm-10pm)
 
 ### API Endpoints
 
@@ -118,6 +149,10 @@ Required `.env` variables:
 - `PUT /api/events/:eventId` - Update existing event
 - `DELETE /api/events/:eventId` - Delete event
 
+**Goal Scheduling:**
+- `GET /api/goals/:goalId/find-slots` - Analyze calendar and return available time slots (returns `timeOptions` array with morning/afternoon/evening alternatives)
+- `POST /api/goals/:goalId/schedule-recurring` - Create single recurring Google Calendar event with RRULE
+
 **Development:**
 - `POST /reset-all-sessions` - Clear all in-memory sessions
 
@@ -129,4 +164,6 @@ Required `.env` variables:
 - No testing framework currently configured
 - Main entry point: `server/server.js`
 - Session storage is in-memory (lost on server restart)
-- No database - goals are not persisted
+- Goals stored in-memory only (lost on server restart, no database persistence)
+- RRULE format: `RRULE:FREQ=DAILY;COUNT=7` or `RRULE:FREQ=DAILY;UNTIL=20260630T235959Z`
+- Recurring event deletion: Users can delete entire series from Google Calendar with one click

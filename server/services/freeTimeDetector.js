@@ -421,7 +421,10 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
     ? allDates.filter(d => isWeekend(d))
     : allDates;
 
-  // 7. Find ONE free slot per day for each time preference
+  // 7. Find free slots per day for each time preference
+  // Option 3: Support multiple sessions per day
+  const maxSessionsPerDay = goal.max_sessions_per_day || 1;
+
   const slotsByPreference = {
     morning: [],
     afternoon: [],
@@ -441,9 +444,13 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
         calendarEvents
       );
 
-      // Take only FIRST free block for this date+preference
+      // Take up to maxSessionsPerDay slots for this date+preference
+      // For multi-session support, we store all available slots for this day
       if (freeBlocks.length > 0) {
-        slotsByPreference[pref].push(freeBlocks[0]);
+        slotsByPreference[pref].push({
+          date: date,
+          slots: freeBlocks.slice(0, maxSessionsPerDay) // Limit to max sessions
+        });
       }
     }
   }
@@ -478,55 +485,84 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
     : 1;
 
   // Create option for each preference
+  // Option 3: Build events with multi-session support
   for (const pref of preferenceOrder.slice(0, 3)) {
-    const slots = slotsByPreference[pref];
+    const daySlots = slotsByPreference[pref]; // Array of {date, slots: []}
 
-    if (slots.length === 0) continue;
+    if (daySlots.length === 0) continue;
 
-    // Get first available slot
-    const firstSlot = slots[0];
+    // Get first available date
+    const firstDaySlot = daySlots[0];
+
+    // Calculate how many total sessions needed based on goal
+    // For multi-session goals (with session_duration), calculate sessions needed
+    // For regular recurring goals (daily/weekly), use maxEventCount
+    let totalSessionsNeeded;
+
+    if (goal.session_duration && goal.target_amount) {
+      // Multi-session goal: "Study 10 hours in 2-hour sessions" = 5 sessions
+      const sessionDuration = goal.session_duration;
+      const targetAmount = goal.target_amount;
+      totalSessionsNeeded = Math.ceil(targetAmount / sessionDuration);
+    } else {
+      // Regular recurring goal: "Learn French daily" = maxEventCount sessions
+      totalSessionsNeeded = maxEventCount;
+    }
 
     // Calculate recurring dates (respecting deadline)
     const recurringDates = getRecurringDates(
       goal.frequency,
-      firstSlot.date,
+      firstDaySlot.date,
       validDates,
       goal.deadline,
       maxEventCount
     );
 
-    // Build events for this time option
+    // Build events for this time option with multi-session support
     const events = [];
-    for (const date of recurringDates) {
-      // Find free slot on this date for this preference
-      const daySlot = slots.find(s => s.date === date);
+    const distributionStrategy = goal.distribution_strategy || 'spread_evenly';
 
-      if (daySlot) {
-        events.push({
-          date: daySlot.date,
-          startTime: daySlot.startTime,
-          endTime: daySlot.endTime,
-          durationMinutes: daySlot.durationMinutes
-        });
+    for (const date of recurringDates) {
+      // Find all slots for this date and preference
+      const daySlotEntry = daySlots.find(s => s.date === date);
+
+      if (daySlotEntry && daySlotEntry.slots) {
+        // Add all available sessions for this day (up to max_sessions_per_day)
+        const sessionsToAdd = distributionStrategy === 'finish_quickly'
+          ? daySlotEntry.slots.length  // Use all available slots
+          : Math.min(1, daySlotEntry.slots.length); // Spread evenly: 1 per day
+
+        for (let i = 0; i < sessionsToAdd && events.length < totalSessionsNeeded; i++) {
+          const slot = daySlotEntry.slots[i];
+          events.push({
+            date: slot.date,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            durationMinutes: slot.durationMinutes
+          });
+        }
       } else {
-        // If no slot found for this exact preference, try to find ANY free time on this date
-        let foundAlternative = false;
+        // If no slot found for this exact preference, try alternative time preferences
         for (const altPref of ['morning', 'afternoon', 'evening']) {
-          const altSlot = slotsByPreference[altPref].find(s => s.date === date);
-          if (altSlot) {
+          if (altPref === pref) continue;
+
+          const altDaySlots = slotsByPreference[altPref];
+          const altDaySlotEntry = altDaySlots.find(s => s.date === date);
+
+          if (altDaySlotEntry && altDaySlotEntry.slots && altDaySlotEntry.slots.length > 0) {
+            const slot = altDaySlotEntry.slots[0];
             events.push({
-              date: altSlot.date,
-              startTime: altSlot.startTime,
-              endTime: altSlot.endTime,
-              durationMinutes: altSlot.durationMinutes
+              date: slot.date,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              durationMinutes: slot.durationMinutes
             });
-            foundAlternative = true;
             break;
           }
         }
       }
 
-      if (events.length >= maxEventCount) break;
+      if (events.length >= totalSessionsNeeded) break;
     }
 
     if (events.length > 0) {
@@ -534,7 +570,8 @@ async function detectFreeTimeSlots(calendarEvents, goal, options = {}) {
         timeSlot: pref,
         label: pref.charAt(0).toUpperCase() + pref.slice(1),
         events: events,
-        totalEvents: events.length
+        totalEvents: events.length,
+        totalHours: (events.length * durationMinutes) / 60 // Add total hours for display
       });
     }
   }
