@@ -78,6 +78,7 @@ app.post("/chat", async (req, res) => {
   try {
     let sessionState = getSession(sessionId);
     sessionState.activeEvents = sessionState.activeEvents || [];
+    sessionState.todos = sessionState.todos || [];
 
     // CRITICAL: Check if there's an active event creation in progress BEFORE parsing
     const hasActiveEventCreation = sessionState.activeEvents &&
@@ -589,19 +590,19 @@ app.post("/chat", async (req, res) => {
         const events = await getEventsForDateRange(qDate);
 
         if (!events || events.length === 0) {
-          const dateStr = new Date(qDate).toLocaleDateString('en-US', {
+          const dateStr = new Date(qDate).toLocaleDateString('en-AU', {
             weekday: 'long',
-            year: 'numeric',
+            day: 'numeric',
             month: 'long',
-            day: 'numeric'
+            year: 'numeric'
           });
           parsed.reply = `You have no events scheduled for ${dateStr}. Your day is free!`;
         } else {
-          const dateStr = new Date(qDate).toLocaleDateString('en-US', {
+          const dateStr = new Date(qDate).toLocaleDateString('en-AU', {
             weekday: 'long',
-            year: 'numeric',
+            day: 'numeric',
             month: 'long',
-            day: 'numeric'
+            year: 'numeric'
           });
 
           let scheduleText = `**Your schedule for ${dateStr}:**\n\n`;
@@ -722,9 +723,9 @@ app.get("/api/upcoming-events", async (req, res) => {
       };
 
       const formatDate = (date) => {
-        return date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
+        return date.toLocaleDateString('en-AU', {
+          day: 'numeric',
+          month: 'short'
         });
       };
 
@@ -735,7 +736,7 @@ app.get("/api/upcoming-events", async (req, res) => {
         title: event.summary || 'Untitled Event',
         time: `${formatTime(startTime)} - ${formatTime(endTime)}`,
         date: formatDate(startTime),
-        fullDateTime: startTime.toLocaleString('en-US', {
+        fullDateTime: startTime.toLocaleString('en-AU', {
           dateStyle: 'long',
           timeStyle: 'short'
         }),
@@ -754,14 +755,145 @@ app.get("/api/upcoming-events", async (req, res) => {
   }
 });
 
+// Get calendar events in date range (for FullCalendar)
+app.get("/api/calendar-events", async (req, res) => {
+  try {
+    const { start, end, sessionId } = req.query;
+    console.log('[DEBUG /api/calendar-events] Request received:', { start, end, sessionId });
+
+    if (!start || !end) {
+      return res.status(400).json({ error: "start and end dates are required" });
+    }
+
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+    console.log('[DEBUG /api/calendar-events] Fetching from Google Calendar...');
+
+    // Convert dates to ISO 8601 format with timezone
+    const timeMin = new Date(start).toISOString();
+    const timeMax = new Date(end).toISOString();
+
+    // Fetch Google Calendar events
+    const response = await calendar.events.list({
+      calendarId: "primary",
+      timeMin: timeMin,
+      timeMax: timeMax,
+      singleEvents: true,
+      orderBy: "startTime"
+    });
+
+    const events = [];
+
+    // Add Google Calendar events
+    response.data.items.forEach(event => {
+      events.push({
+        id: event.id,
+        title: event.summary || 'Untitled Event',
+        start: event.start.dateTime || event.start.date,
+        end: event.end.dateTime || event.end.date,
+        color: '#4a9eff', // Blue for regular calendar events
+        backgroundColor: '#4a9eff',
+        borderColor: '#4a9eff',
+        textColor: '#ffffff',
+        extendedProps: {
+          type: 'calendar_event',
+          description: event.description || '',
+          location: event.location || ''
+        }
+      });
+    });
+
+    // Add scheduled to-dos if sessionId provided
+    if (sessionId) {
+      const sessionState = getSession(sessionId);
+      if (sessionState && sessionState.todos) {
+        sessionState.todos.forEach(todo => {
+          if (todo.scheduled_slot && todo.scheduled_slot.start) {
+            events.push({
+              id: `todo_${todo.id}`,
+              title: `🔨 ${todo.title}`,
+              start: todo.scheduled_slot.start,
+              end: todo.scheduled_slot.end,
+              color: '#ff9500', // Orange for to-dos
+              backgroundColor: '#ff9500',
+              borderColor: '#ff9500',
+              textColor: '#ffffff',
+              extendedProps: {
+                type: 'todo',
+                todoId: todo.id
+              }
+            });
+          }
+        });
+      }
+    }
+
+    console.log('[DEBUG /api/calendar-events] Returning', events.length, 'events');
+    console.log('[DEBUG /api/calendar-events] Sample event:', events[0]);
+    res.json({ events });
+  } catch (error) {
+    console.error("[ERROR /api/calendar-events] Failed:", error.message);
+    res.status(500).json({ error: "Failed to fetch calendar events" });
+  }
+});
+
+// Get single event endpoint
+app.get("/api/events/:eventId", async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    console.log('[DEBUG GET /api/events] Fetching event:', eventId);
+
+    const auth = getAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+
+    const response = await calendar.events.get({
+      calendarId: 'primary',
+      eventId: eventId
+    });
+
+    const event = response.data;
+
+    // Calculate duration in minutes
+    const startTime = new Date(event.start.dateTime || event.start.date);
+    const endTime = new Date(event.end.dateTime || event.end.date);
+    const duration = Math.round((endTime - startTime) / 60000);
+
+    // Format response to match expected structure
+    const eventData = {
+      id: event.id,
+      title: event.summary || 'Untitled Event',
+      date: startTime.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+      time: startTime.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) +
+            ' - ' +
+            endTime.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      fullDateTime: startTime.toLocaleString('en-AU', { dateStyle: 'long', timeStyle: 'short' }),
+      startDateTime: event.start.dateTime || event.start.date,
+      endDateTime: event.end.dateTime || event.end.date,
+      location: event.location || '',
+      description: event.description || '',
+      duration: duration
+    };
+
+    console.log('[DEBUG GET /api/events] Returning event:', eventData);
+    res.json(eventData);
+  } catch (error) {
+    console.error('[ERROR GET /api/events] Failed:', error.message);
+    res.status(500).json({ error: "Failed to fetch event" });
+  }
+});
+
 // Update event endpoint
 app.put("/api/events/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
     const { summary, startDateTime, endDateTime, location, description } = req.body;
 
+    console.log('[DEBUG PUT /api/events] Request:', { eventId, summary, startDateTime, endDateTime, location, description });
+
     // Validate required fields
     if (!summary || !startDateTime || !endDateTime) {
+      console.log('[ERROR PUT /api/events] Missing required fields');
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -784,12 +916,13 @@ app.put("/api/events/:eventId", async (req, res) => {
     if (location) eventUpdate.location = location;
     if (description) eventUpdate.description = description;
 
-    await calendar.events.update({
+    const response = await calendar.events.update({
       calendarId: 'primary',
       eventId: eventId,
       requestBody: eventUpdate
     });
 
+    console.log('[DEBUG PUT /api/events] Success:', response.data.id);
     res.json({ success: true, message: "Event updated successfully" });
   } catch (error) {
     console.error("Error updating event:", error);
@@ -801,6 +934,8 @@ app.put("/api/events/:eventId", async (req, res) => {
 app.delete("/api/events/:eventId", async (req, res) => {
   try {
     const { eventId } = req.params;
+
+    console.log('[DEBUG DELETE /api/events] Deleting event:', eventId);
 
     const auth = getAuthClient();
     const calendar = google.calendar({ version: "v3", auth });
@@ -820,6 +955,536 @@ app.delete("/api/events/:eventId", async (req, res) => {
     }
 
     res.status(500).json({ error: "Failed to delete event" });
+  }
+});
+
+// ============ To-Do API Endpoints ============
+
+// POST /api/todos - Create new to-do
+app.post("/api/todos", (req, res) => {
+  try {
+    const { title, duration_minutes = 60, deadline = null, sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    if (!title || title.trim() === "") {
+      return res.status(400).json({ error: "title is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    sessionState.todos = sessionState.todos || [];
+
+    const newTodo = {
+      id: uuidv4(),
+      title: title.trim(),
+      completed: false,
+      duration_minutes,
+      deadline,
+      scheduled_slot: null,
+      created_at: new Date().toISOString()
+    };
+
+    sessionState.todos.push(newTodo);
+    saveSession(sessionId, sessionState);
+
+    res.json({ todoId: newTodo.id, todo: newTodo });
+  } catch (error) {
+    console.error("Error creating to-do:", error);
+    res.status(500).json({ error: "Failed to create to-do" });
+  }
+});
+
+// GET /api/todos - Get all to-dos
+app.get("/api/todos", (req, res) => {
+  try {
+    const { sessionId } = req.query;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const todos = sessionState.todos || [];
+
+    res.json({ todos });
+  } catch (error) {
+    console.error("Error fetching to-dos:", error);
+    res.status(500).json({ error: "Failed to fetch to-dos" });
+  }
+});
+
+// PUT /api/todos/:todoId - Update to-do
+app.put("/api/todos/:todoId", (req, res) => {
+  try {
+    const { todoId } = req.params;
+    const { title, completed, duration_minutes, deadline, sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    sessionState.todos = sessionState.todos || [];
+
+    const todo = sessionState.todos.find(t => t.id === todoId);
+
+    if (!todo) {
+      return res.status(404).json({ error: "To-do not found" });
+    }
+
+    // Update fields if provided
+    if (title !== undefined) todo.title = title.trim();
+    if (completed !== undefined) todo.completed = completed;
+    if (duration_minutes !== undefined) todo.duration_minutes = duration_minutes;
+    if (deadline !== undefined) todo.deadline = deadline;
+
+    saveSession(sessionId, sessionState);
+
+    res.json({ todo });
+  } catch (error) {
+    console.error("Error updating to-do:", error);
+    res.status(500).json({ error: "Failed to update to-do" });
+  }
+});
+
+// DELETE /api/todos/:todoId - Delete to-do
+app.delete("/api/todos/:todoId", (req, res) => {
+  try {
+    const { todoId } = req.params;
+    const { sessionId } = req.query;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    sessionState.todos = sessionState.todos || [];
+
+    const todoIndex = sessionState.todos.findIndex(t => t.id === todoId);
+
+    if (todoIndex === -1) {
+      return res.status(404).json({ error: "To-do not found" });
+    }
+
+    sessionState.todos.splice(todoIndex, 1);
+    saveSession(sessionId, sessionState);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting to-do:", error);
+    res.status(500).json({ error: "Failed to delete to-do" });
+  }
+});
+
+// ============ Time Parsing for Conversational Scheduling ============
+
+function parseTimeRequest(input) {
+  const inputLower = input.toLowerCase().trim();
+  const now = new Date();
+
+  // Parse date
+  let targetDate = null;
+
+  // "today"
+  if (/\btoday\b/.test(inputLower)) {
+    targetDate = new Date(now);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  // "tomorrow"
+  else if (/\btomorrow\b/.test(inputLower)) {
+    targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + 1);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  // "in X days"
+  else if (/\bin (\d+) days?\b/.test(inputLower)) {
+    const match = inputLower.match(/\bin (\d+) days?\b/);
+    const daysAhead = parseInt(match[1]);
+    targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + daysAhead);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  // Day of week (monday, tuesday, etc)
+  else if (/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(inputLower)) {
+    const match = inputLower.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+    const dayName = match[1];
+    const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const targetDayIndex = daysOfWeek.indexOf(dayName);
+    const currentDayIndex = now.getDay();
+
+    let daysUntilTarget = targetDayIndex - currentDayIndex;
+    if (daysUntilTarget <= 0) daysUntilTarget += 7; // Next week
+
+    targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + daysUntilTarget);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  // Date formats: "oct 15", "october 15", "10/15", "15 oct"
+  else if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})\b/.test(inputLower)) {
+    const match = inputLower.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (\d{1,2})\b/);
+    const monthMap = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const month = monthMap[match[1]];
+    const day = parseInt(match[2]);
+    targetDate = new Date(now.getFullYear(), month, day);
+    if (targetDate < now) targetDate.setFullYear(targetDate.getFullYear() + 1);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  else if (/(\d{1,2}) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/.test(inputLower)) {
+    const match = inputLower.match(/(\d{1,2}) (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/);
+    const monthMap = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const day = parseInt(match[1]);
+    const month = monthMap[match[2]];
+    targetDate = new Date(now.getFullYear(), month, day);
+    if (targetDate < now) targetDate.setFullYear(targetDate.getFullYear() + 1);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+  // Default: today
+  else {
+    targetDate = new Date(now);
+    targetDate.setHours(0, 0, 0, 0);
+  }
+
+  // Parse time
+  let timeRange = null;
+  let isExact = false;
+
+  // Exact time: "3pm", "3:30pm", "15:00"
+  if (/\b(\d{1,2})(:(\d{2}))?\s*(am|pm)\b/.test(inputLower)) {
+    const match = inputLower.match(/\b(\d{1,2})(:(\d{2}))?\s*(am|pm)\b/);
+    let hour = parseInt(match[1]);
+    const minute = match[3] ? parseInt(match[3]) : 0;
+    const period = match[4];
+
+    if (period === 'pm' && hour !== 12) hour += 12;
+    if (period === 'am' && hour === 12) hour = 0;
+
+    timeRange = [hour, hour + 1]; // Include the hour (e.g., 16 to 17 for 4pm)
+    isExact = true;
+  }
+  // 24-hour format: "15:00", "9:30"
+  else if (/\b(\d{1,2}):(\d{2})\b/.test(inputLower)) {
+    const match = inputLower.match(/\b(\d{1,2}):(\d{2})\b/);
+    const hour = parseInt(match[1]);
+    const minute = parseInt(match[2]);
+
+    timeRange = [hour, hour + 1]; // Include the hour
+    isExact = true;
+  }
+  // Morning: 9am-12pm
+  else if (/\bmorning\b/.test(inputLower)) {
+    timeRange = [9, 12];
+    isExact = false;
+  }
+  // Afternoon: 12pm-5pm
+  else if (/\bafternoon\b/.test(inputLower)) {
+    timeRange = [12, 17];
+    isExact = false;
+  }
+  // Evening: 5pm-8pm
+  else if (/\bevening\b/.test(inputLower)) {
+    timeRange = [17, 20];
+    isExact = false;
+  }
+  // Default: work hours 9am-6pm
+  else {
+    timeRange = [9, 18];
+    isExact = false;
+  }
+
+  return {
+    date: targetDate,
+    timeRange: timeRange,
+    isExact: isExact
+  };
+}
+
+// ============ Slot Finding Algorithm ============
+
+async function findAvailableSlots(duration_minutes, deadline, sessionId, timeRange = null, targetDate = null) {
+  const auth = getAuthClient();
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  // Determine search range
+  const now = new Date();
+  const endDate = deadline
+    ? new Date(deadline)
+    : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days default
+
+  // Get existing calendar events
+  const response = await calendar.events.list({
+    calendarId: 'primary',
+    timeMin: now.toISOString(),
+    timeMax: endDate.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime'
+  });
+
+  const busySlots = response.data.items.map(event => ({
+    start: new Date(event.start.dateTime || event.start.date),
+    end: new Date(event.end.dateTime || event.end.date)
+  }));
+
+  // Find free slots
+  const slots = [];
+  const workStart = timeRange ? timeRange[0] : 9;  // Use provided time range or default 9 AM
+  const workEnd = timeRange ? timeRange[1] : 18;   // Use provided time range or default 6 PM
+
+  // If targetDate provided, only search that day
+  const searchStartDate = targetDate ? new Date(targetDate) : new Date(now);
+  searchStartDate.setHours(0, 0, 0, 0);
+
+  const searchEndDate = targetDate ? new Date(targetDate) : endDate;
+  searchEndDate.setHours(23, 59, 59, 999);
+
+  // Iterate through each day
+  const currentDate = new Date(searchStartDate);
+
+  console.log('[DEBUG findSlots] Search params:', {
+    duration_minutes,
+    workStart,
+    workEnd,
+    searchStartDate: searchStartDate.toISOString(),
+    searchEndDate: searchEndDate.toISOString(),
+    now: now.toISOString()
+  });
+
+  while (currentDate <= searchEndDate) {
+    // Check each 30-min slot during work hours
+    for (let hour = workStart; hour < workEnd; hour++) {
+      for (let minute of [0, 30]) {
+        const slotStart = new Date(currentDate);
+        slotStart.setHours(hour, minute, 0, 0);
+
+        const slotEnd = new Date(slotStart.getTime() + duration_minutes * 60000);
+
+        const slotEndHour = slotEnd.getHours();
+        const slotEndMinute = slotEnd.getMinutes();
+        const isBeyondWorkHours = slotEndHour > workEnd || (slotEndHour === workEnd && slotEndMinute > 0);
+
+        console.log('[DEBUG slot check]', {
+          slotStart: slotStart.toISOString(),
+          slotEnd: slotEnd.toISOString(),
+          slotEndHour,
+          slotEndMinute,
+          workEnd,
+          isPast: slotStart < now,
+          beyondWorkHours: isBeyondWorkHours
+        });
+
+        // Skip if slot is in the past
+        if (slotStart < now) continue;
+
+        // Skip if slot end goes beyond work hours
+        if (isBeyondWorkHours) continue;
+
+        // Check if slot conflicts with any busy time
+        const hasConflict = busySlots.some(busy =>
+          (slotStart < busy.end && slotEnd > busy.start)
+        );
+
+        if (!hasConflict) {
+          slots.push({
+            start: slotStart.toISOString(),
+            end: slotEnd.toISOString(),
+            label: formatSlotLabel(slotStart)
+          });
+        }
+
+        // Return early if we have enough slots
+        if (slots.length >= 3) {
+          return slots.slice(0, 3);
+        }
+      }
+    }
+
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Return whatever slots we found (might be less than 3)
+  return slots;
+}
+
+function formatSlotLabel(date) {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  let dayLabel;
+  if (date.toDateString() === today.toDateString()) {
+    dayLabel = 'Today';
+  } else if (date.toDateString() === tomorrow.toDateString()) {
+    dayLabel = 'Tomorrow';
+  } else {
+    dayLabel = date.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  const time = date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${dayLabel} at ${time}`;
+}
+
+// POST /api/todos/:todoId/schedule - Find available slots
+app.post("/api/todos/:todoId/schedule", async (req, res) => {
+  try {
+    const { todoId } = req.params;
+    const { sessionId } = req.body;
+
+    console.log('[DEBUG schedule] Request for todoId:', todoId, 'sessionId:', sessionId);
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const todo = sessionState.todos?.find(t => t.id === todoId);
+
+    console.log('[DEBUG schedule] Found todo:', todo);
+
+    if (!todo) {
+      return res.status(404).json({ error: "To-do not found" });
+    }
+
+    // Find available slots
+    console.log('[DEBUG schedule] Finding slots for duration:', todo.duration_minutes, 'deadline:', todo.deadline);
+    const slots = await findAvailableSlots(
+      todo.duration_minutes,
+      todo.deadline,
+      sessionId
+    );
+
+    console.log('[DEBUG schedule] Found slots:', slots.length);
+    res.json({ slots });
+  } catch (error) {
+    console.error('Error finding slots:', error);
+    res.status(500).json({ error: "Failed to find available slots" });
+  }
+});
+
+// POST /api/todos/:todoId/schedule-chat - Conversational scheduling
+app.post("/api/todos/:todoId/schedule-chat", async (req, res) => {
+  try {
+    const { todoId } = req.params;
+    const { sessionId, userInput } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    if (!userInput) {
+      return res.status(400).json({ error: "userInput is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const todo = sessionState.todos?.find(t => t.id === todoId);
+
+    if (!todo) {
+      return res.status(404).json({ error: "To-do not found" });
+    }
+
+    // Parse the user's time request
+    const parsed = parseTimeRequest(userInput);
+    console.log('[DEBUG schedule-chat] Parsed input:', parsed);
+
+    // Find slots based on parsed time
+    const slots = await findAvailableSlots(
+      todo.duration_minutes,
+      todo.deadline,
+      sessionId,
+      parsed.timeRange,
+      parsed.date
+    );
+
+    console.log('[DEBUG schedule-chat] Found slots:', slots.length);
+
+    if (slots.length === 0) {
+      return res.json({
+        response: "I couldn't find any available time then. Could you try a different time?",
+        slots: [],
+        isExact: parsed.isExact
+      });
+    }
+
+    // If exact time requested and we have a match, confirm
+    if (parsed.isExact && slots.length > 0) {
+      const exactSlot = slots[0]; // First slot is the requested time
+      return res.json({
+        response: `I found ${formatSlotLabel(new Date(exactSlot.start))}. Should I book this time?`,
+        slots: [exactSlot],
+        isExact: true,
+        needsConfirmation: true
+      });
+    }
+
+    // If vague time, give options
+    return res.json({
+      response: `I found these times available:`,
+      slots: slots,
+      isExact: false,
+      needsConfirmation: false
+    });
+
+  } catch (error) {
+    console.error('Error in schedule-chat:', error);
+    res.status(500).json({ error: "Failed to process scheduling request" });
+  }
+});
+
+// POST /api/todos/:todoId/book - Book a time slot
+app.post("/api/todos/:todoId/book", async (req, res) => {
+  try {
+    const { todoId } = req.params;
+    const { sessionId, slotStart, slotEnd } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const sessionState = getSession(sessionId);
+    const todo = sessionState.todos?.find(t => t.id === todoId);
+
+    if (!todo) {
+      return res.status(404).json({ error: "To-do not found" });
+    }
+
+    // If rescheduling, delete the old calendar event first
+    if (todo.scheduled_slot?.google_event_id) {
+      try {
+        const auth = getAuthClient();
+        const calendar = google.calendar({ version: 'v3', auth });
+        await calendar.events.delete({
+          calendarId: 'primary',
+          eventId: todo.scheduled_slot.google_event_id
+        });
+        console.log('[DEBUG] Deleted old calendar event:', todo.scheduled_slot.google_event_id);
+      } catch (error) {
+        console.error('[DEBUG] Failed to delete old event:', error.message);
+        // Continue anyway - the event might have been manually deleted
+      }
+    }
+
+    // Create Google Calendar event
+    const calendarResult = await createCalendarEvent({
+      summary: `🔨 ${todo.title}`,
+      description: `To-do: ${todo.title}`,
+      startDateTime: slotStart,
+      endDateTime: slotEnd
+    });
+
+    // Update to-do with scheduled info
+    todo.scheduled_slot = {
+      start: slotStart,
+      end: slotEnd,
+      google_event_id: calendarResult.eventId
+    };
+
+    saveSession(sessionId, sessionState);
+
+    res.json({ todo });
+  } catch (error) {
+    console.error('Error booking slot:', error);
+    res.status(500).json({ error: "Failed to book time slot" });
   }
 });
 

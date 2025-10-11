@@ -94,6 +94,13 @@ function localParse(message, session = {}) {
     target_unit: null, // Step 1.5: Unit of measurement (e.g., "hours", "times", "km")
     deadline: null, // Step 1.5: ISO date string (YYYY-MM-DD)
     frequency: null, // Step 1.5: Recurrence pattern (e.g., "daily", "weekly", "3x per week")
+
+    // Recurring event fields (Phase 1)
+    recurrence_pattern: null, // "daily" | "weekly" | "custom"
+    recurrence_days: null, // ["monday", "wednesday"] for custom patterns
+    recurrence_count: null, // Number of occurrences
+    recurrence_end_date: null, // Alternative to count (YYYY-MM-DD)
+    recurrence_interval: null, // Every N days/weeks (default 1)
   };
 
   // Intent detection for personal productivity - enhanced delete/cancel recognition
@@ -110,7 +117,21 @@ function localParse(message, session = {}) {
   } else if (/\bmove\b.*\b(to|at)\b/.test(lower)) {
     res.intent = "reschedule";
   } else if (/\b(create|add|schedule|book|make|plan|set up)\b.*\b(event|appointment|meeting|reminder)\b/.test(lower)) {
-    res.intent = "create_event";
+    // Check if this is a recurring event request
+    const recurringPatterns = [
+      /\b(repeat|recurring|recur|repeating)\b/,
+      /\bevery\s+(day|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekday|weekend)/,
+      /\b(daily|weekly|monthly)\b/,
+      /\bfor\s+\d+\s+(days|weeks|months)/,
+      /\b\d+\s+times?\b/,
+      /\bstarting\s+.*\s+(and|until|for)\b/
+    ];
+
+    if (recurringPatterns.some(pattern => pattern.test(lower))) {
+      res.intent = "create_recurring_event";
+    } else {
+      res.intent = "create_event";
+    }
   } else if (/\b(what do i have|what's my schedule|my appointments|my calendar|check|show me|what do i have)\b/.test(lower)) {
     res.intent = "check_schedule";
   }
@@ -264,6 +285,70 @@ function localParse(message, session = {}) {
     }
   }
 
+  // Extract recurring event details (Phase 1 - basic patterns only)
+  if (res.intent === "create_recurring_event") {
+    // Pattern: "daily" or "every day"
+    if (/\b(daily|every day)\b/i.test(lower)) {
+      res.recurrence_pattern = "daily";
+      res.recurrence_interval = 1;
+    }
+
+    // Pattern: "weekly" or "every week"
+    if (/\b(weekly|every week)\b/i.test(lower)) {
+      res.recurrence_pattern = "weekly";
+      res.recurrence_interval = 1;
+    }
+
+    // Pattern: "for X days/weeks"
+    const countMatch = lower.match(/\bfor\s+(\d+)\s+(days?|weeks?)/i);
+    if (countMatch) {
+      const num = parseInt(countMatch[1]);
+      const unit = countMatch[2];
+
+      if (unit.startsWith("day")) {
+        res.recurrence_count = num;
+        if (!res.recurrence_pattern) res.recurrence_pattern = "daily";
+      } else if (unit.startsWith("week")) {
+        res.recurrence_count = num * 7;
+        if (!res.recurrence_pattern) res.recurrence_pattern = "daily";
+      }
+    }
+
+    // Pattern: "X times"
+    const timesMatch = lower.match(/(\d+)\s+times?/i);
+    if (timesMatch) {
+      res.recurrence_count = parseInt(timesMatch[1]);
+    }
+
+    // Pattern: "every Monday", "every Wednesday"
+    const dayMatch = lower.match(/every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
+    if (dayMatch) {
+      res.recurrence_pattern = "weekly";
+      res.recurrence_days = [dayMatch[1].toLowerCase()];
+    }
+
+    // Pattern: "every weekday"
+    if (/every\s+weekday/i.test(lower)) {
+      res.recurrence_pattern = "weekly";
+      res.recurrence_days = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+    }
+
+    // Pattern: "lasts X hour(s)" or "lasts X minutes"
+    if (!res.duration_minutes) {
+      const durationMatch = lower.match(/\b(?:lasts?|lasting)\s+(?:an?\s+)?(\d+)?\s*(hour|minute|hr|min)/i);
+      if (durationMatch) {
+        const num = durationMatch[1] ? parseInt(durationMatch[1]) : 1;
+        const unit = durationMatch[2];
+
+        if (unit.startsWith("hour") || unit === "hr") {
+          res.duration_minutes = num * 60;
+        } else if (unit.startsWith("minute") || unit === "min") {
+          res.duration_minutes = num;
+        }
+      }
+    }
+  }
+
   return res;
 }
 
@@ -381,9 +466,53 @@ G) MULTI-STEP CONVERSATIONS:
    - If user adds info to existing activeEvent → Keep same intent, add new fields
    - "6pm" after creating event → intent: "create_event", time: "18:00" (NOT reschedule)
 
+H) RECURRING EVENT DETECTION (Phase 1):
+   Use intent "create_recurring_event" when user requests repeating events.
+
+   PATTERN RECOGNITION:
+   - "repeat", "recurring", "repeating", "recur" → Recurring event
+   - "every day", "daily", "each day" → pattern: "daily", interval: 1
+   - "every week", "weekly" → pattern: "weekly", interval: 1
+   - "every Monday", "every Wednesday" → pattern: "weekly", days: ["monday"] or ["wednesday"]
+   - "every Monday and Wednesday" → pattern: "weekly", days: ["monday", "wednesday"]
+   - "every weekday" → pattern: "weekly", days: ["monday", "tuesday", "wednesday", "thursday", "friday"]
+   - "for 8 days", "for 2 weeks" → Extract count (8 or 14)
+   - "8 times", "10 times" → count: 8 or 10
+   - "until next Friday" → Calculate end_date from "next Friday"
+   - "starting Monday for a month" → date: <next Monday>, count: ~30 (daily) or 4 (weekly)
+   - "lasts an hour", "lasts 90 minutes" → duration_minutes: 60 or 90
+   - "every other day" → pattern: "daily", interval: 2
+   - "every 2 weeks" → pattern: "weekly", interval: 2
+
+   EXTRACTION LOGIC:
+   - recurrence_pattern: "daily" | "weekly" | "custom"
+   - recurrence_days: Array of day names in lowercase (only for weekly/custom patterns)
+   - recurrence_count: Total number of occurrences (prioritize this over end_date)
+   - recurrence_end_date: ISO date string (YYYY-MM-DD) - only if user specifies "until <date>"
+   - recurrence_interval: Number (1 = every time, 2 = every other time, etc.)
+   - duration_minutes: Extract from "lasts X hours/minutes" if present
+
+   EXAMPLES:
+   - "Gym every Monday at 8am for 4 weeks" →
+     intent: "create_recurring_event", title: "Gym", time: "08:00",
+     recurrence_pattern: "weekly", recurrence_days: ["monday"], recurrence_count: 4
+
+   - "Daily standup at 10am for the next 2 weeks" →
+     intent: "create_recurring_event", title: "Daily standup", time: "10:00",
+     recurrence_pattern: "daily", recurrence_count: 14
+
+   - "Make an event starting Monday called Gym that lasts an hour at 8am and ensure it repeats for 8 days after" →
+     intent: "create_recurring_event", title: "Gym", date: "<next Monday>", time: "08:00",
+     duration_minutes: 60, recurrence_pattern: "daily", recurrence_count: 8
+
+   - "Team meeting every Monday and Wednesday at 3pm until end of month" →
+     intent: "create_recurring_event", title: "Team meeting", time: "15:00",
+     recurrence_pattern: "weekly", recurrence_days: ["monday", "wednesday"],
+     recurrence_end_date: "<end of current month>"
+
 OUTPUT SCHEMA (JSON only, no markdown):
 {
-  "intent": "create_event" | "cancel" | "reschedule" | "check_schedule" | "set_goal" | "check_goals" | "other",
+  "intent": "create_event" | "create_recurring_event" | "cancel" | "reschedule" | "check_schedule" | "set_goal" | "check_goals" | "other",
   "title": "string or null",
   "date": "YYYY-MM-DD or null",
   "time": "HH:MM or null",
@@ -397,6 +526,14 @@ OUTPUT SCHEMA (JSON only, no markdown):
   "target_unit": "hour" | "time" | "session" | "km" | "minute" | "day" | "week" | "month" | string | null,
   "deadline": "YYYY-MM-DD or null",
   "frequency": "daily" | "weekly" | "monthly" | "Nx per week" | string | null,
+
+  // RECURRING EVENT FIELDS (Phase 1):
+  "recurrence_pattern": "daily" | "weekly" | "custom" | null,
+  "recurrence_days": ["monday", "wednesday"] | null,
+  "recurrence_count": number | null,
+  "recurrence_end_date": "YYYY-MM-DD" | null,
+  "recurrence_interval": number | null,
+
   "reply": "Helpful natural language response or null",
   "confirmation_response": "yes" | "no" | null
 }
@@ -480,6 +617,26 @@ Note: "this week" = deadline is end of current week
 19. SET GOAL - Different verb (Step 1.5: with target):
 Input: "I'd like to read 2 books this month"
 Output: {"intent": "set_goal", "goal_description": "read 2 books this month", "goal_type": "study", "target_amount": 2, "target_unit": "book", "deadline": "2025-10-31", "frequency": null, "reply": null}
+
+20. RECURRING EVENT - Daily for X days (Phase 1):
+Input: "Make an event starting Monday called Gym that lasts an hour at 8am and ensure it repeats for 8 days after"
+Output: {"intent": "create_recurring_event", "title": "Gym", "date": "2025-10-13", "time": "08:00", "duration_minutes": 60, "recurrence_pattern": "daily", "recurrence_count": 8, "recurrence_interval": 1, "reply": null}
+
+21. RECURRING EVENT - Every specific day (Phase 1):
+Input: "Gym every Monday at 8am for 4 weeks"
+Output: {"intent": "create_recurring_event", "title": "Gym", "time": "08:00", "recurrence_pattern": "weekly", "recurrence_days": ["monday"], "recurrence_count": 4, "recurrence_interval": 1, "reply": null}
+
+22. RECURRING EVENT - Multiple days per week (Phase 1):
+Input: "Team meeting every Monday and Wednesday at 3pm for the next month"
+Output: {"intent": "create_recurring_event", "title": "Team meeting", "time": "15:00", "recurrence_pattern": "weekly", "recurrence_days": ["monday", "wednesday"], "recurrence_count": 8, "recurrence_interval": 1, "reply": null}
+
+23. RECURRING EVENT - Daily standup (Phase 1):
+Input: "Daily standup at 10am for the next 2 weeks"
+Output: {"intent": "create_recurring_event", "title": "Daily standup", "time": "10:00", "recurrence_pattern": "daily", "recurrence_count": 14, "recurrence_interval": 1, "reply": null}
+
+24. RECURRING EVENT - Every weekday (Phase 1):
+Input: "Morning workout every weekday at 7am for 2 weeks"
+Output: {"intent": "create_recurring_event", "title": "Morning workout", "time": "07:00", "recurrence_pattern": "weekly", "recurrence_days": ["monday", "tuesday", "wednesday", "thursday", "friday"], "recurrence_count": 10, "recurrence_interval": 1, "reply": null}
 
 20. DISAMBIGUATION - Goal vs Event:
 Input: "I want to study tomorrow at 3pm"

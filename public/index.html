@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BuddyBoi</title>
+
+  <!-- FullCalendar CSS -->
+  <link href='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.5/main.min.css' rel='stylesheet' />
+
   <style>
     * {
       margin: 0;
@@ -48,7 +52,7 @@
     }
 
     .sidebar {
-      width: 300px;
+      width: 500px;
       background: #262626;
       border-left: 1px solid #333;
       padding: 20px;
@@ -140,6 +144,283 @@
       text-align: center;
       padding: 20px;
       font-size: 14px;
+    }
+
+    /* Calendar View Styles */
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+
+    .view-toggle-buttons {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .view-toggle {
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #999;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    .view-toggle:hover {
+      background: #2a2a2a;
+      border-color: #404040;
+    }
+
+    .view-toggle.active {
+      background: #3a7dc7;
+      border-color: #3a7dc7;
+      color: white;
+    }
+
+    .calendar-date-range {
+      text-align: center;
+      padding: 12px 16px;
+      color: #e0e0e0;
+      font-size: 15px;
+      font-weight: 600;
+      border-bottom: 1px solid #2a2a2a;
+      margin: 0 -20px 0 -20px;
+    }
+
+    .calendar-controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #2a2a2a;
+      margin: 0 -20px;
+    }
+
+    .calendar-nav-btn {
+      padding: 6px 12px;
+      background: #262626;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .calendar-nav-btn:hover {
+      background: #2a2a2a;
+      border-color: #4a9eff;
+    }
+
+    .calendar-view-select {
+      padding: 6px 12px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 30px;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 4L6 8L10 4' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+    }
+
+    .calendar-view-select:hover {
+      background: #202020;
+      border-color: #404040;
+    }
+
+    .calendar-view-select:focus {
+      outline: none;
+      border-color: #4a9eff;
+      background: #1e1e1e;
+    }
+
+    /* FullCalendar Dark Theme Overrides */
+    #calendar {
+      margin-top: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }
+
+    .fc {
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+
+    /* Calendar Header */
+    .fc .fc-toolbar-title {
+      color: #e0e0e0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    /* Day Headers (Mon, Tue, etc) */
+    .fc .fc-col-header-cell {
+      background: #1e1e1e;
+      border-color: #2a2a2a !important;
+      color: #999;
+      font-weight: 600;
+      font-size: 11px;
+      padding: 8px 4px;
+    }
+
+    .fc .fc-col-header-cell-cushion {
+      color: #999;
+      text-decoration: none;
+    }
+
+    /* Grid Lines */
+    .fc .fc-scrollgrid {
+      border-color: #2a2a2a !important;
+    }
+
+    .fc .fc-timegrid-slot {
+      border-color: #2a2a2a !important;
+      height: 3em;
+    }
+
+    .fc .fc-timegrid-axis {
+      background: #1a1a1a;
+      border-color: #2a2a2a !important;
+    }
+
+    /* Time Labels */
+    .fc .fc-timegrid-slot-label {
+      color: #666;
+      font-size: 11px;
+      border-color: #2a2a2a !important;
+    }
+
+    /* Today Column Highlight */
+    .fc .fc-day-today {
+      background-color: rgba(74, 158, 255, 0.05) !important;
+    }
+
+    .fc .fc-col-header-cell.fc-day-today {
+      background-color: rgba(74, 158, 255, 0.1) !important;
+    }
+
+    .fc .fc-col-header-cell.fc-day-today .fc-col-header-cell-cushion {
+      color: #4a9eff;
+    }
+
+    /* Events */
+    .fc-event {
+      border: none !important;
+      border-radius: 6px;
+      padding: 2px 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Force event colors from backend data */
+    .fc-event .fc-event-main {
+      background-color: inherit !important;
+      border-color: inherit !important;
+      color: inherit !important;
+    }
+
+    .fc-event:hover {
+      filter: brightness(1.2);
+    }
+
+    .fc-event-title {
+      font-weight: 500;
+    }
+
+    .fc-event-time {
+      font-size: 11px;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+
+    /* Current Time Indicator */
+    .fc .fc-timegrid-now-indicator-line {
+      border-color: #4a9eff;
+      border-width: 2px;
+    }
+
+    .fc .fc-timegrid-now-indicator-arrow {
+      border-color: #4a9eff;
+    }
+
+    /* Scrollbar for Calendar */
+    .fc-scroller::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .fc-scroller::-webkit-scrollbar-track {
+      background: #1a1a1a;
+    }
+
+    .fc-scroller::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 4px;
+    }
+
+    .fc-scroller::-webkit-scrollbar-thumb:hover {
+      background: #444;
+    }
+
+    /* Remove default header (we use custom controls) */
+    .fc .fc-toolbar {
+      display: none;
+    }
+
+    /* Day cell background */
+    .fc .fc-timegrid-col {
+      background: #1a1a1a;
+    }
+
+    /* Slot lanes */
+    .fc .fc-timegrid-slot-lane {
+      border-color: #2a2a2a !important;
+    }
+
+    /* Month View Styles */
+    .fc .fc-daygrid-day {
+      background: #1a1a1a;
+    }
+
+    .fc .fc-daygrid-day-number {
+      color: #e0e0e0;
+      padding: 4px;
+      font-size: 13px;
+    }
+
+    .fc .fc-daygrid-day.fc-day-today {
+      background-color: rgba(74, 158, 255, 0.08) !important;
+    }
+
+    .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+      color: #4a9eff;
+      font-weight: 600;
+    }
+
+    .fc .fc-daygrid-event {
+      margin: 1px 2px;
+      padding: 2px 4px;
+    }
+
+    /* Day View Styles */
+    .fc .fc-timegrid-axis-cushion {
+      color: #666;
     }
 
     .header h1 {
@@ -617,14 +898,506 @@
       }
 
     }
+
+    /* ============ To-Dos Panel Styles ============ */
+
+    /* To-Dos Button */
+    .todos-button {
+      position: absolute;
+      left: 20px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: white;
+      border: none;
+      color: #333;
+      padding: 10px 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
+    }
+
+    .todos-button:hover {
+      background: #f0f0f0;
+      transform: translateY(-50%) scale(1.05);
+      box-shadow: 0 6px 16px rgba(255, 255, 255, 0.3);
+    }
+
+    .todos-button:active {
+      transform: translateY(-50%) scale(0.98);
+    }
+
+    /* To-Dos Panel */
+    .todos-panel {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .todos-container {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 400px;
+      height: 100vh;
+      background: #1a1a1a;
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      animation: slideInLeft 0.3s ease;
+    }
+
+    @keyframes slideInLeft {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+
+    .todos-header {
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .todos-header h2 {
+      color: white;
+      font-size: 20px;
+      margin: 0;
+    }
+
+    /* Input Section */
+    .todos-input-section {
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      gap: 10px;
+    }
+
+    .todo-input {
+      flex: 1;
+      background: #262626;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      color: white;
+      font-size: 15px;
+    }
+
+    .todo-input:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .add-todo-btn {
+      width: 40px;
+      height: 40px;
+      background: #4a9eff;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .add-todo-btn:hover {
+      background: #3a8eef;
+      transform: scale(1.05);
+    }
+
+    /* To-Do List */
+    .todos-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .todo-item {
+      background: #262626;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 12px;
+      transition: all 0.2s;
+    }
+
+    .todo-item:hover {
+      border-color: #4a9eff;
+    }
+
+    .todo-item.completed {
+      opacity: 0.5;
+    }
+
+    .todo-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .todo-checkbox {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #666;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-top: 2px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+    }
+
+    .todo-checkbox.checked {
+      background: #4CAF50;
+      border-color: #4CAF50;
+    }
+
+    .todo-content {
+      flex: 1;
+    }
+
+    .todo-title {
+      color: white;
+      font-size: 15px;
+      margin-bottom: 8px;
+    }
+
+    .todo-title.completed {
+      text-decoration: line-through;
+      color: #666;
+    }
+
+    .todo-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #999;
+    }
+
+    .todo-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .schedule-btn, .edit-btn, .delete-btn {
+      padding: 6px 12px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: transparent;
+      color: #4a9eff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .schedule-btn:hover, .edit-btn:hover {
+      background: #4a9eff;
+      color: white;
+    }
+
+    .delete-btn {
+      color: #ff4444;
+    }
+
+    .delete-btn:hover {
+      background: #ff4444;
+      color: white;
+    }
+
+    /* ============ Schedule Modal Styles ============ */
+
+    .schedule-modal-container {
+      background: #1a1a1a;
+      border-radius: 12px;
+      width: 500px;
+      max-width: 90%;
+      border: 1px solid #333;
+    }
+
+    .schedule-header {
+      padding: 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .schedule-header h2 {
+      color: white;
+      font-size: 18px;
+      margin: 0;
+    }
+
+    .schedule-body {
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 400px;
+    }
+
+    /* Duration Selection View */
+    .duration-selection-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 40px;
+      gap: 32px;
+    }
+
+    .duration-question {
+      font-size: 20px;
+      font-weight: 600;
+      color: white;
+      margin: 0;
+      text-align: center;
+    }
+
+    .duration-picker {
+      display: flex;
+      gap: 24px;
+      align-items: flex-end;
+    }
+
+    .duration-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .duration-input-group label {
+      font-size: 13px;
+      color: #999;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .duration-select {
+      width: 100px;
+      padding: 12px 16px;
+      font-size: 24px;
+      font-weight: 600;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      color: #e0e0e0;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.2s, background-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+    }
+
+    .duration-select:hover {
+      border-color: #404040;
+      background: #202020;
+    }
+
+    .duration-select:focus {
+      outline: none;
+      border-color: #4a9eff;
+      background: #1e1e1e;
+    }
+
+    .continue-btn {
+      padding: 14px 32px;
+      background: #3a7dc7;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .continue-btn:hover {
+      background: #4a8dd7;
+    }
+
+    .back-btn-chat {
+      padding: 10px 16px;
+      background: transparent;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .back-btn-chat:hover {
+      background: #262626;
+      border-color: #4a9eff;
+    }
+
+    .schedule-chat-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .schedule-message {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .schedule-message.assistant {
+      align-items: flex-start;
+    }
+
+    .schedule-message.user {
+      align-items: flex-end;
+    }
+
+    .schedule-message-content {
+      padding: 12px 16px;
+      border-radius: 12px;
+      max-width: 80%;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .schedule-message.assistant .schedule-message-content {
+      background: #262626;
+      color: white;
+    }
+
+    .schedule-message.user .schedule-message-content {
+      background: #4a9eff;
+      color: white;
+    }
+
+    .schedule-slots {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .schedule-slot-btn {
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    .schedule-slot-btn:hover {
+      border-color: #4a9eff;
+      background: #262626;
+    }
+
+    .schedule-input-container {
+      padding: 16px;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 10px;
+    }
+
+    .schedule-input {
+      flex: 1;
+      padding: 12px 16px;
+      background: #262626;
+      border: 1px solid #333;
+      border-radius: 20px;
+      color: white;
+      font-size: 14px;
+    }
+
+    .schedule-input:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .schedule-input::placeholder {
+      color: #666;
+    }
+
+    .send-schedule-btn {
+      width: 44px;
+      height: 44px;
+      background: #4a9eff;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .send-schedule-btn:hover {
+      background: #3a8eef;
+    }
+
+    .cancel-btn:hover {
+      background: #262626;
+    }
+
+    .book-btn {
+      padding: 12px 24px;
+      background: #4a9eff;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .book-btn:hover {
+      background: #3a8eef;
+    }
+
+    .book-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
   <div class="chat-container">
     <div class="main-content">
       <div class="header">
+        <button class="todos-button" onclick="openTodosPanel()">
+          📋 To-Dos
+        </button>
         <h1>BuddyBoi</h1>
-        <p>Your personal assistant for calendar management and emails</p>
+        <p>Your personal assistant for calendar management</p>
         <a href="/auth" class="auth-button">Authorize Google</a>
       </div>
 
@@ -634,9 +1407,6 @@
         <div class="suggestions">
           <div class="suggestion" onclick="useSuggestion('Create a meeting called Team Standup tomorrow at 2pm')">
             Create Event
-          </div>
-          <div class="suggestion" onclick="useSuggestion('Send email to john@example.com saying hello')">
-            Send Email
           </div>
           <div class="suggestion" onclick="useSuggestion('Schedule dentist appointment for Friday at 10am')">
             Schedule Appointment
@@ -670,16 +1440,54 @@
     </div>
 
     <div class="sidebar">
-      <h3>
-        <span>Upcoming Events</span>
+      <!-- Sidebar Header with Toggle -->
+      <div class="sidebar-header">
+        <div class="view-toggle-buttons">
+          <button class="view-toggle active" data-view="calendar" onclick="switchView('calendar')">
+            📅 Calendar
+          </button>
+          <button class="view-toggle" data-view="list" onclick="switchView('list')">
+            📋 List
+          </button>
+        </div>
         <button class="refresh-button" id="refreshButton" onclick="refreshEvents()" title="Refresh events">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
         </button>
-      </h3>
-      <div id="upcomingEvents">
-        <div class="no-events">No upcoming events</div>
+      </div>
+
+      <!-- Calendar View (visible by default) -->
+      <div id="calendarView" style="display: block;">
+        <!-- Calendar Date Range Display -->
+        <div class="calendar-date-range" id="calendarDateRange">
+          <!-- Will be populated by JavaScript -->
+        </div>
+
+        <!-- Calendar Navigation Controls -->
+        <div class="calendar-controls">
+          <button class="calendar-nav-btn" onclick="calendarToday()">Today</button>
+          <button class="calendar-nav-btn" onclick="calendarPrev()">←</button>
+          <button class="calendar-nav-btn" onclick="calendarNext()">→</button>
+          <select class="calendar-view-select" onchange="changeCalendarView(this.value)">
+            <option value="timeGridWeek">Week</option>
+            <option value="timeGridDay">Day</option>
+            <option value="dayGridMonth">Month</option>
+          </select>
+        </div>
+
+        <!-- FullCalendar will render here -->
+        <div id="calendar"></div>
+      </div>
+
+      <!-- List View (hidden by default) -->
+      <div id="listView" style="display: none;">
+        <h3 style="padding: 16px; margin: 0; font-size: 16px;">
+          <span>Upcoming Events</span>
+        </h3>
+        <div id="upcomingEvents">
+          <div class="no-events">No upcoming events</div>
+        </div>
       </div>
     </div>
   </div>
@@ -815,6 +1623,102 @@
     </div>
   </div>
 
+  <!-- To-Dos Panel -->
+  <div id="todosPanel" class="todos-panel" style="display: none;">
+    <div class="todos-container">
+      <!-- Header -->
+      <div class="todos-header">
+        <h2>📋 To-Dos</h2>
+        <button class="close-btn" onclick="closeTodosPanel()">&times;</button>
+      </div>
+
+      <!-- Input Section -->
+      <div class="todos-input-section">
+        <input
+          type="text"
+          id="todoInput"
+          placeholder="Add a to-do..."
+          class="todo-input"
+        />
+        <button onclick="addTodo()" class="add-todo-btn">+</button>
+      </div>
+
+      <!-- To-Do List -->
+      <div id="todosList" class="todos-list">
+        <!-- Dynamic content -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule Modal -->
+  <div id="scheduleModal" class="modal" style="display: none;">
+    <div class="schedule-modal-container">
+      <div class="schedule-header">
+        <h2 id="scheduleTitle">📅 Schedule: <span id="scheduleTodoTitle"></span></h2>
+        <button class="close-btn" onclick="closeScheduleModal()">&times;</button>
+      </div>
+
+      <!-- Duration Selection View -->
+      <div id="durationView" class="schedule-body">
+        <div class="duration-selection-container">
+          <p class="duration-question">How long will this take?</p>
+
+          <div class="duration-picker">
+            <div class="duration-input-group">
+              <label>Hours</label>
+              <select id="hoursSelect" class="duration-select">
+                <option value="0">0</option>
+                <option value="1" selected>1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+
+            <div class="duration-input-group">
+              <label>Minutes</label>
+              <select id="minutesSelect" class="duration-select">
+                <option value="0" selected>0</option>
+                <option value="15">15</option>
+                <option value="30">30</option>
+                <option value="45">45</option>
+              </select>
+            </div>
+          </div>
+
+          <button class="continue-btn" onclick="confirmDuration()">
+            Continue →
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat View (hidden initially) -->
+      <div id="chatView" class="schedule-body" style="display: none;">
+        <div class="schedule-chat-area" id="scheduleChatArea">
+          <!-- Messages will be added here -->
+        </div>
+
+        <div class="schedule-input-container">
+          <button class="back-btn-chat" onclick="backToDuration()">
+            ← Back
+          </button>
+          <input
+            type="text"
+            id="scheduleInput"
+            class="schedule-input"
+            placeholder="e.g., tomorrow afternoon, thursday at 3pm"
+            onkeypress="if(event.key === 'Enter') sendScheduleMessage()"
+          />
+          <button class="send-schedule-btn" onclick="sendScheduleMessage()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     const chatArea = document.getElementById('chatArea');
@@ -826,6 +1730,253 @@
     // Generate unique session ID
     const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
     console.log('Session ID:', sessionId);
+
+    // Calendar instance
+    let calendar = null;
+
+    // Fetch calendar events from API
+    async function fetchCalendarEvents(info, successCallback, failureCallback) {
+      try {
+        const start = info.startStr;
+        const end = info.endStr;
+
+        console.log('Fetching calendar events:', { start, end, sessionId });
+
+        const response = await fetch(
+          `/api/calendar-events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&sessionId=${encodeURIComponent(sessionId)}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Calendar events loaded:', data.events.length, 'events');
+        successCallback(data.events);
+      } catch (error) {
+        console.error('Error loading calendar events:', error);
+        failureCallback(error);
+      }
+    }
+
+    // Handle event clicks
+    async function handleEventClick(info) {
+      info.jsEvent.preventDefault(); // Prevent browser navigation
+
+      const event = info.event;
+      const eventType = event.extendedProps.type;
+
+      console.log('Event clicked:', event.id, 'Type:', eventType);
+
+      // If it's a to-do, open the to-do panel
+      if (eventType === 'todo') {
+        const todoId = event.extendedProps.todoId;
+        console.log('To-do clicked, ID:', todoId);
+        // Switch to to-do view
+        showTodoView();
+        // TODO: Could highlight or scroll to the specific to-do
+        return;
+      }
+
+      // For regular calendar events, fetch full details and open modal
+      try {
+        const response = await fetch(`/api/events/${event.id}`);
+        if (!response.ok) throw new Error('Failed to fetch event details');
+
+        const eventData = await response.json();
+        openEventModal(eventData);
+      } catch (error) {
+        console.error('Error loading event details:', error);
+        // Fallback: create event object from calendar data
+        const eventObj = {
+          id: event.id,
+          title: event.title,
+          date: event.start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }),
+          time: event.start.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }) +
+                ' - ' +
+                event.end.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }),
+          fullDateTime: event.start.toLocaleString('en-AU', { dateStyle: 'long', timeStyle: 'short' }),
+          startDateTime: event.start.toISOString(),
+          endDateTime: event.end.toISOString(),
+          location: event.extendedProps.location || '',
+          description: event.extendedProps.description || '',
+          duration: Math.round((event.end - event.start) / 60000)
+        };
+        openEventModal(eventObj);
+      }
+    }
+
+    // Initialize FullCalendar
+    function initCalendar() {
+      const calendarEl = document.getElementById('calendar');
+
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        // View Configuration
+        initialView: 'timeGridWeek',
+        headerToolbar: false, // We use custom controls
+        height: 'auto',
+
+        // Locale for Australian date format
+        locale: 'en-AU',
+
+        // Time Settings
+        slotMinTime: '06:00:00',
+        slotMaxTime: '22:00:00',
+        slotDuration: '00:30:00',
+        slotMinHeight: 30, // Reduce slot height for less vertical scrolling
+        scrollTime: '08:00:00', // Start scroll position at 8am
+
+        // Timezone
+        timeZone: 'Australia/Sydney',
+
+        // Display Options
+        allDaySlot: false,
+        nowIndicator: true,
+        weekends: true,
+
+        // Day Header Format - Australian format (day/month)
+        dayHeaderFormat: { weekday: 'short', day: 'numeric', month: 'numeric', omitCommas: true },
+
+        // Week starts on Monday
+        firstDay: 1,
+
+        // Event Display
+        displayEventTime: true,
+        displayEventEnd: false,
+        eventTimeFormat: {
+          hour: 'numeric',
+          minute: '2-digit',
+          meridiem: 'short'
+        },
+
+        // Interactions (will wire up handlers in later steps)
+        editable: false, // Will enable in drag-drop step
+        selectable: false,
+
+        // Event source - fetch from API
+        events: fetchCalendarEvents,
+
+        // Loading indicator
+        loading: function(isLoading) {
+          if (isLoading) {
+            console.log('Calendar loading...');
+          } else {
+            console.log('Calendar loaded');
+          }
+        },
+
+        // Update date range when view changes
+        datesSet: function(info) {
+          updateCalendarDateRange(info);
+        },
+
+        // Force event colors to apply correctly
+        eventDidMount: function(info) {
+          const event = info.event;
+          const el = info.el;
+
+          // Apply colors from event data
+          if (event.backgroundColor) {
+            el.style.backgroundColor = event.backgroundColor;
+          }
+          if (event.borderColor) {
+            el.style.borderColor = event.borderColor;
+          }
+          if (event.textColor) {
+            el.style.color = event.textColor;
+          }
+        },
+
+        // Handle event clicks
+        eventClick: handleEventClick
+      });
+
+      calendar.render();
+      console.log('FullCalendar initialized');
+    }
+
+    // Update the date range display
+    function updateCalendarDateRange(info) {
+      const dateRangeEl = document.getElementById('calendarDateRange');
+      if (!dateRangeEl) return;
+
+      const view = info.view;
+      const start = info.start;
+      const end = new Date(info.end.getTime() - 1); // Subtract 1ms to get actual last day
+
+      let dateText = '';
+
+      // Use Australia/Sydney timezone for formatting
+      const tzOptions = { timeZone: 'Australia/Sydney' };
+
+      if (view.type === 'dayGridMonth') {
+        // Month view: "October 2025"
+        const monthYear = start.toLocaleDateString('en-AU', {
+          ...tzOptions,
+          month: 'long',
+          year: 'numeric'
+        });
+        dateText = monthYear;
+      } else if (view.type === 'timeGridWeek') {
+        // Week view: "6 - 12 Oct, 2025"
+        const startDay = start.toLocaleDateString('en-AU', { ...tzOptions, day: 'numeric' });
+        const startMonth = start.toLocaleDateString('en-AU', { ...tzOptions, month: 'short' });
+        const endDay = end.toLocaleDateString('en-AU', { ...tzOptions, day: 'numeric' });
+        const endMonth = end.toLocaleDateString('en-AU', { ...tzOptions, month: 'short' });
+        const year = start.toLocaleDateString('en-AU', { ...tzOptions, year: 'numeric' });
+
+        if (start.toLocaleDateString('en-AU', { ...tzOptions, month: 'numeric' }) ===
+            end.toLocaleDateString('en-AU', { ...tzOptions, month: 'numeric' })) {
+          // Same month: "6 - 12 Oct, 2025"
+          dateText = `${startDay} - ${endDay} ${startMonth}, ${year}`;
+        } else {
+          // Different months: "30 Oct - 5 Nov, 2025"
+          dateText = `${startDay} ${startMonth} - ${endDay} ${endMonth}, ${year}`;
+        }
+      } else if (view.type === 'timeGridDay') {
+        // Day view: "Friday, 11 Oct, 2025"
+        dateText = start.toLocaleDateString('en-AU', {
+          ...tzOptions,
+          weekday: 'long',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
+
+      dateRangeEl.textContent = dateText;
+    }
+
+    // Navigation functions for calendar controls
+    function calendarToday() {
+      if (calendar) {
+        calendar.today();
+      }
+    }
+
+    function calendarPrev() {
+      if (calendar) {
+        calendar.prev();
+      }
+    }
+
+    function calendarNext() {
+      if (calendar) {
+        calendar.next();
+      }
+    }
+
+    function changeCalendarView(viewType) {
+      if (calendar) {
+        calendar.changeView(viewType);
+        console.log('Calendar view changed to:', viewType);
+      }
+    }
+
+    // Initialize calendar on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      initCalendar();
+    });
 
     function addMessage(text, sender) {
       // Remove welcome message on first interaction
@@ -882,6 +2033,12 @@
 
         const data = await response.json();
         addMessage(data.reply, 'bot');
+
+        // Refresh calendar to show any new events
+        if (calendar) {
+          console.log('Refreshing calendar after chat response');
+          calendar.refetchEvents();
+        }
 
       } catch (error) {
         console.error('Error:', error);
@@ -952,6 +2109,43 @@
       }, 600);
     }
 
+    // Switch between Calendar and List views
+    function switchView(viewType) {
+      console.log('[DEBUG switchView] Switching to view:', viewType);
+
+      const calendarView = document.getElementById('calendarView');
+      const listView = document.getElementById('listView');
+      const calendarBtn = document.querySelector('[data-view="calendar"]');
+      const listBtn = document.querySelector('[data-view="list"]');
+
+      if (viewType === 'calendar') {
+        // Show calendar, hide list
+        calendarView.style.display = 'block';
+        listView.style.display = 'none';
+
+        // Update button states
+        calendarBtn.classList.add('active');
+        listBtn.classList.remove('active');
+
+        // Refresh calendar
+        if (calendar) {
+          calendar.refetchEvents();
+          calendar.updateSize(); // Ensure proper sizing
+        }
+      } else if (viewType === 'list') {
+        // Show list, hide calendar
+        calendarView.style.display = 'none';
+        listView.style.display = 'block';
+
+        // Update button states
+        calendarBtn.classList.remove('active');
+        listBtn.classList.add('active');
+
+        // Refresh list view
+        loadUpcomingEvents();
+      }
+    }
+
     // Load events on page load
     loadUpcomingEvents();
 
@@ -1011,10 +2205,17 @@
       document.getElementById('eventModal').classList.remove('show');
       currentEvent = null;
       exitEditMode();
+
+      // Refresh calendar to show any updates
+      if (calendar) {
+        calendar.refetchEvents();
+      }
     }
 
     function enterEditMode() {
       if (!currentEvent) return;
+
+      console.log('[DEBUG enterEditMode] Current event:', currentEvent);
 
       // Populate edit form
       document.getElementById('editTitle').value = currentEvent.title || '';
@@ -1024,15 +2225,25 @@
 
       // Parse date and time from startDateTime
       if (currentEvent.startDateTime) {
+        // The startDateTime comes from Google Calendar in the format:
+        // "2025-10-11T09:30:00+11:00" (timezone-aware)
+        // We need to convert this to local date/time for the input fields
         const startDate = new Date(currentEvent.startDateTime);
+
+        // Get local time components
         const year = startDate.getFullYear();
         const month = String(startDate.getMonth() + 1).padStart(2, '0');
         const day = String(startDate.getDate()).padStart(2, '0');
         const hours = String(startDate.getHours()).padStart(2, '0');
         const minutes = String(startDate.getMinutes()).padStart(2, '0');
 
-        document.getElementById('editDate').value = `${year}-${month}-${day}`;
-        document.getElementById('editTime').value = `${hours}:${minutes}`;
+        const dateValue = `${year}-${month}-${day}`;
+        const timeValue = `${hours}:${minutes}`;
+
+        console.log('[DEBUG enterEditMode] Setting form values:', { dateValue, timeValue });
+
+        document.getElementById('editDate').value = dateValue;
+        document.getElementById('editTime').value = timeValue;
       }
 
       // Toggle view/edit modes
@@ -1064,6 +2275,8 @@
       const location = document.getElementById('editLocation').value.trim();
       const description = document.getElementById('editDescription').value.trim();
 
+      console.log('[DEBUG saveEvent] Form values:', { title, date, time, duration, location, description });
+
       // Validate required fields
       if (!title) {
         alert('Please enter an event title');
@@ -1079,13 +2292,26 @@
       }
 
       // Disable save button
-      const saveButton = event.target;
+      const saveButton = document.querySelector('#editModeButtons button:first-child');
       if (saveButton) saveButton.disabled = true;
 
       try {
         // Calculate start and end times
+        // Create local datetime string and convert to Date object
         const startDateTime = new Date(`${date}T${time}:00`);
         const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+        // Convert to timezone-aware ISO format
+        // The backend expects Australia/Sydney timezone
+        const startISO = startDateTime.toISOString();
+        const endISO = endDateTime.toISOString();
+
+        console.log('[DEBUG saveEvent] Calculated times:', {
+          localStart: `${date}T${time}:00`,
+          startDateTime: startISO,
+          endDateTime: endISO,
+          duration: duration
+        });
 
         const response = await fetch('/api/events/' + currentEvent.id, {
           method: 'PUT',
@@ -1094,20 +2320,29 @@
           },
           body: JSON.stringify({
             summary: title,
-            startDateTime: startDateTime.toISOString(),
-            endDateTime: endDateTime.toISOString(),
+            startDateTime: startISO,
+            endDateTime: endISO,
             location: location || undefined,
             description: description || undefined
           })
         });
 
+        console.log('[DEBUG saveEvent] Response status:', response.status);
+
         if (!response.ok) {
+          const errorData = await response.json();
+          console.error('[DEBUG saveEvent] Error response:', errorData);
           throw new Error('Failed to update event');
         }
 
         // Reload events and close modal
         await loadUpcomingEvents();
         closeEventModal();
+
+        // Refresh calendar view
+        if (calendar) {
+          calendar.refetchEvents();
+        }
 
       } catch (error) {
         console.error('Error updating event:', error);
@@ -1147,6 +2382,11 @@
         // Reload events
         await loadUpcomingEvents();
 
+        // Refresh calendar view
+        if (calendar) {
+          calendar.refetchEvents();
+        }
+
       } catch (error) {
         console.error('Error deleting event:', error);
         alert('Failed to delete event. Please try again.');
@@ -1171,9 +2411,379 @@
       if (e.key === 'Escape') {
         closeEventModal();
         closeDeleteModal();
+        closeTodosPanel();
+        closeScheduleModal();
       }
     });
 
+    // ============ To-Dos Functions ============
+
+    // Open/Close To-Dos Panel
+    function openTodosPanel() {
+      document.getElementById('todosPanel').style.display = 'block';
+      loadTodos();
+    }
+
+    function closeTodosPanel() {
+      document.getElementById('todosPanel').style.display = 'none';
+    }
+
+    // Click outside panel to close
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('todosPanel');
+      if (e.target === panel) {
+        closeTodosPanel();
+      }
+    });
+
+    // Add To-Do
+    async function addTodo() {
+      const input = document.getElementById('todoInput');
+      const title = input.value.trim();
+
+      if (!title) return;
+
+      try {
+        const response = await fetch('/api/todos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            sessionId,
+            duration_minutes: 60  // Default 1 hour
+          })
+        });
+
+        if (!response.ok) throw new Error('Failed to create to-do');
+
+        input.value = '';
+        await loadTodos();
+      } catch (error) {
+        console.error('Error adding to-do:', error);
+        alert('Failed to add to-do');
+      }
+    }
+
+    // Load To-Dos
+    async function loadTodos() {
+      try {
+        const response = await fetch(`/api/todos?sessionId=${sessionId}`);
+        const { todos } = await response.json();
+
+        renderTodos(todos);
+      } catch (error) {
+        console.error('Error loading to-dos:', error);
+      }
+    }
+
+    // Render To-Dos
+    function renderTodos(todos) {
+      const todosList = document.getElementById('todosList');
+
+      if (todos.length === 0) {
+        todosList.innerHTML = '<p style="color: #666; text-align: center; margin-top: 40px;">No to-dos yet. Add one above!</p>';
+        return;
+      }
+
+      // Separate completed and active
+      const active = todos.filter(t => !t.completed);
+      const completed = todos.filter(t => t.completed);
+
+      todosList.innerHTML = [...active, ...completed]
+        .map(todo => {
+          const isScheduled = todo.scheduled_slot !== null;
+          const scheduledLabel = isScheduled
+            ? formatScheduledLabel(todo.scheduled_slot.start)
+            : 'Not scheduled';
+
+          return `
+            <div class="todo-item ${todo.completed ? 'completed' : ''}">
+              <div class="todo-header">
+                <div
+                  class="todo-checkbox ${todo.completed ? 'checked' : ''}"
+                  onclick="toggleTodoComplete('${todo.id}')"
+                >
+                  ${todo.completed ? '✓' : ''}
+                </div>
+                <div class="todo-content">
+                  <div class="todo-title ${todo.completed ? 'completed' : ''}">
+                    ${todo.title}
+                  </div>
+                  <div class="todo-status">
+                    ${todo.completed ? '✓ Done' : `📅 ${scheduledLabel}`}
+                  </div>
+                  ${!todo.completed ? `
+                    <div class="todo-actions">
+                      <button class="schedule-btn" onclick="openScheduleModal('${todo.id}')">
+                        ${isScheduled ? 'Reschedule' : 'Schedule'}
+                      </button>
+                      <button class="delete-btn" onclick="deleteTodo('${todo.id}')">Delete</button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+    }
+
+    function formatScheduledLabel(isoString) {
+      const date = new Date(isoString);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      let dayLabel;
+      if (date.toDateString() === today.toDateString()) {
+        dayLabel = 'Today';
+      } else if (date.toDateString() === tomorrow.toDateString()) {
+        dayLabel = 'Tomorrow';
+      } else {
+        dayLabel = date.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+      }
+
+      const time = date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true });
+      return `${dayLabel} ${time}`;
+    }
+
+    // Toggle Complete
+    async function toggleTodoComplete(todoId) {
+      try {
+        const response = await fetch(`/api/todos/${todoId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            completed: true,
+            sessionId
+          })
+        });
+
+        if (!response.ok) throw new Error('Failed to update to-do');
+
+        await loadTodos();
+      } catch (error) {
+        console.error('Error updating to-do:', error);
+      }
+    }
+
+    // Delete To-Do
+    async function deleteTodo(todoId) {
+      if (!confirm('Delete this to-do?')) return;
+
+      try {
+        const response = await fetch(`/api/todos/${todoId}?sessionId=${sessionId}`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete to-do');
+
+        await loadTodos();
+      } catch (error) {
+        console.error('Error deleting to-do:', error);
+      }
+    }
+
+    // Enter key to add
+    document.getElementById('todoInput')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') addTodo();
+    });
+
+    // ============ Schedule Modal Functions ============
+
+    let currentScheduleTodo = null;
+    let currentTodoForScheduling = null;
+    let selectedDurationMinutes = 60;
+
+    async function openScheduleModal(todoId) {
+      currentScheduleTodo = todoId;
+
+      // Get todo details
+      const response = await fetch(`/api/todos?sessionId=${sessionId}`);
+      const { todos } = await response.json();
+      const todo = todos.find(t => t.id === todoId);
+
+      if (!todo) return;
+
+      currentTodoForScheduling = todo;
+
+      // Update title
+      document.getElementById('scheduleTodoTitle').textContent = todo.title;
+
+      // Reset to duration view
+      document.getElementById('durationView').style.display = 'flex';
+      document.getElementById('chatView').style.display = 'none';
+
+      // Reset selectors to default (1 hour)
+      document.getElementById('hoursSelect').value = '1';
+      document.getElementById('minutesSelect').value = '0';
+
+      // Show modal
+      document.getElementById('scheduleModal').style.display = 'flex';
+    }
+
+    function closeScheduleModal() {
+      document.getElementById('scheduleModal').style.display = 'none';
+      currentScheduleTodo = null;
+      currentTodoForScheduling = null;
+    }
+
+    async function confirmDuration() {
+      const hours = parseInt(document.getElementById('hoursSelect').value);
+      const minutes = parseInt(document.getElementById('minutesSelect').value);
+      selectedDurationMinutes = (hours * 60) + minutes;
+
+      if (selectedDurationMinutes === 0) {
+        alert('Please select a duration greater than 0');
+        return;
+      }
+
+      // Update the todo duration
+      await fetch(`/api/todos/${currentScheduleTodo}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          duration_minutes: selectedDurationMinutes,
+          sessionId
+        })
+      });
+
+      // Switch to chat view
+      document.getElementById('durationView').style.display = 'none';
+      document.getElementById('chatView').style.display = 'flex';
+
+      // Clear and initialize chat
+      const chatArea = document.getElementById('scheduleChatArea');
+      chatArea.innerHTML = '';
+
+      addScheduleMessage(
+        `Great! Looking for ${selectedDurationMinutes} minute${selectedDurationMinutes !== 1 ? 's' : ''}.\n\nWhen would you like to work on this?\n\nJust type:\n• tomorrow afternoon\n• thursday at 3pm\n• friday morning`,
+        'assistant'
+      );
+
+      // Focus input
+      setTimeout(() => {
+        document.getElementById('scheduleInput').focus();
+      }, 100);
+    }
+
+    function backToDuration() {
+      document.getElementById('chatView').style.display = 'none';
+      document.getElementById('durationView').style.display = 'flex';
+    }
+
+    function addScheduleMessage(text, sender) {
+      const chatArea = document.getElementById('scheduleChatArea');
+
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `schedule-message ${sender}`;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'schedule-message-content';
+      contentDiv.textContent = text;
+
+      messageDiv.appendChild(contentDiv);
+      chatArea.appendChild(messageDiv);
+
+      // Scroll to bottom
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function addScheduleSlots(slots, needsConfirmation) {
+      const chatArea = document.getElementById('scheduleChatArea');
+
+      const slotsDiv = document.createElement('div');
+      slotsDiv.className = 'schedule-slots';
+
+      slots.forEach(slot => {
+        const btn = document.createElement('button');
+        btn.className = 'schedule-slot-btn';
+        btn.textContent = slot.label;
+        btn.onclick = () => bookSlot(slot.start, slot.end);
+        slotsDiv.appendChild(btn);
+      });
+
+      chatArea.appendChild(slotsDiv);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    async function sendScheduleMessage() {
+      const input = document.getElementById('scheduleInput');
+      const userInput = input.value.trim();
+
+      if (!userInput) return;
+
+      // Add user message
+      addScheduleMessage(userInput, 'user');
+      input.value = '';
+
+      try {
+        // Find time slots (duration already set via dropdown)
+        const response = await fetch(`/api/todos/${currentScheduleTodo}/schedule-chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            userInput
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Add assistant response
+        addScheduleMessage(data.response, 'assistant');
+
+        // Show slot options if available
+        if (data.slots && data.slots.length > 0) {
+          addScheduleSlots(data.slots, data.needsConfirmation);
+        }
+
+      } catch (error) {
+        console.error('Error in schedule chat:', error);
+        addScheduleMessage('Sorry, something went wrong. Please try again.', 'assistant');
+      }
+    }
+
+    async function bookSlot(slotStart, slotEnd) {
+      try {
+        const response = await fetch(`/api/todos/${currentScheduleTodo}/book`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            slotStart,
+            slotEnd
+          })
+        });
+
+        if (!response.ok) throw new Error('Failed to book slot');
+
+        addScheduleMessage('✓ Perfect! I\'ve added it to your calendar.', 'assistant');
+
+        // Refresh calendar to show new event
+        if (calendar) {
+          console.log('Refreshing calendar after booking slot');
+          calendar.refetchEvents();
+        }
+
+        // Wait a moment then close and refresh
+        setTimeout(async () => {
+          closeScheduleModal();
+          await loadTodos();
+        }, 1500);
+
+      } catch (error) {
+        console.error('Error booking slot:', error);
+        addScheduleMessage('Sorry, I couldn\'t book that time. Please try again.', 'assistant');
+      }
+    }
+
   </script>
+
+  <!-- FullCalendar JS -->
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@5.11.5/main.min.js'></script>
 </body>
 </html>
